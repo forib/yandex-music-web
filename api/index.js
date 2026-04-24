@@ -1,4 +1,6 @@
 // Vercel serverless entry — all /api/* routes, no static serving, no listen
+// NOTE: Vercel strips the /api prefix before calling this function,
+// so routes here use /proxy, /stream etc. (not /api/proxy, /api/stream).
 const express = require('express');
 
 const app = express();
@@ -16,7 +18,7 @@ const YANDEX_HEADERS = {
 };
 
 // Forward JSON API calls to api.music.yandex.net
-app.get('/api/proxy', async (req, res) => {
+app.get(['/proxy', '/api/proxy'], async (req, res) => {
   const { path: apiPath, ...queryParams } = req.query;
   if (!apiPath) return res.status(400).json({ error: 'path required' });
 
@@ -38,7 +40,7 @@ app.get('/api/proxy', async (req, res) => {
 });
 
 // Proxy binary downloads (audio CDN, cover art) to bypass CORS — streamed
-app.get('/api/stream', async (req, res) => {
+app.get(['/stream', '/api/stream'], async (req, res) => {
   const { url } = req.query;
   if (!url) return res.status(400).json({ error: 'url required' });
 
@@ -56,7 +58,7 @@ app.get('/api/stream', async (req, res) => {
 });
 
 // Resolve a Yandex download-info URL → final direct audio URL (XML parse + MD5 sign)
-app.get('/api/resolve-download', async (req, res) => {
+app.get(['/resolve-download', '/api/resolve-download'], async (req, res) => {
   const { url, codec } = req.query;
   if (!url || !codec) return res.status(400).json({ error: 'url and codec required' });
 
@@ -82,7 +84,7 @@ app.get('/api/resolve-download', async (req, res) => {
 });
 
 // Server-side POST to /playlists/list (UUID kinds rejected by that endpoint via GET)
-app.get('/api/playlist', async (req, res) => {
+app.get(['/playlist', '/api/playlist'], async (req, res) => {
   const { id } = req.query;
   if (!id) return res.status(400).json({ error: 'id required' });
 
@@ -105,7 +107,7 @@ app.get('/api/playlist', async (req, res) => {
 });
 
 // Fetch lyrics (avoids CORS)
-app.get('/api/lyrics', async (req, res) => {
+app.get(['/lyrics', '/api/lyrics'], async (req, res) => {
   const { trackId, format = 'TEXT' } = req.query;
   if (!trackId) return res.status(400).json({ error: 'trackId required' });
 
