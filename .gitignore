@@ -2,3 +2,5 @@ node_modules/
 public/lib/
 .vercel/
 *.log
+
+.vercel
