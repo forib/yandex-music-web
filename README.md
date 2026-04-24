@@ -1,5 +1,12 @@
 # Yandex Music Web
 
+> **⚠️ Early development** — the app is functional but some features may be incomplete or broken. Report issues on the [Issues](https://github.com/forib/yandex-music-web/issues) page.
+
+🌐 **Live web app:** [yandex-music-web.vercel.app](https://yandex-music-web.vercel.app)
+💾 **Desktop app (Windows):** see [Releases](https://github.com/forib/yandex-music-web/releases)
+
+---
+
 [English](#english) | [Русский](#русский)
 
 ---
