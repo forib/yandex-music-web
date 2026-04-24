@@ -1,0 +1,12 @@
+{
+  "name": "yandex-music-web",
+  "version": "1.0.0",
+  "description": "Yandex Music browser downloader",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.0"
+  }
+}

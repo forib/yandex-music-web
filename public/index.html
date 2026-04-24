@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Yandex Music Downloader</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%23ffd700'/><text x='16' y='22' text-anchor='middle' font-size='20' font-family='sans-serif'>♪</text></svg>"/>
+<link rel="stylesheet" href="style.css"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap" media="print" onload="this.media='all'"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" media="print" onload="this.media='all'"/>
+</head>
+<body class="bg-[#0a0a0a] text-[#f1f1f1] font-body-md overflow-x-hidden">
+
+<!-- Header -->
+<header class="bg-black border-b-2 border-white dark:border-white fixed top-0 left-0 w-full z-50">
+  <div class="flex justify-between items-center w-full px-6 h-16">
+    <span class="text-sm font-black bg-yellow-400 text-black px-4 py-1 uppercase tracking-wider">YAYMD</span>
+    <div class="flex items-center gap-sm">
+      <button onclick="toggleLang()" style="width:40px;height:40px;aspect-ratio:1;flex-shrink:0" class="flex items-center justify-center bg-primary text-black hover:bg-[#e6c200]">
+        <span id="lang-label" style="font-size:11px;font-weight:900;letter-spacing:0.05em">RU</span>
+      </button>
+      <button onclick="toggleTheme()" style="width:40px;height:40px;aspect-ratio:1;flex-shrink:0" class="flex items-center justify-center bg-primary text-black hover:bg-[#e6c200]">
+        <span id="theme-icon" class="material-symbols-outlined font-bold">light_mode</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main class="pt-20">
+<div class="max-w-7xl mx-auto" style="padding:16px 16px 8px">
+<div class="grid grid-cols-12" style="gap:12px">
+
+  <!-- Section 1: Authorization -->
+  <section class="col-span-12 border border-[#333] bg-[#121212]" style="padding:12px 16px">
+    <div class="flex flex-col md:flex-row gap-md items-end">
+      <div class="flex-grow">
+        <label class="font-label-sm uppercase text-[#d0c6ab] block mb-xs" data-i18n="auth.token">OAuth Token</label>
+        <input id="token" type="password" autocomplete="off"
+          class="w-full border-0 border-b border-primary focus:border-b-2 focus:ring-0 text-body-md py-2 px-0 bg-transparent text-white"
+          data-i18n-placeholder="auth.placeholder"
+          placeholder="y0__xC…"/>
+      </div>
+      <div class="flex items-center gap-sm flex-shrink-0">
+        <button onclick="togglePw()" class="bg-transparent text-white py-2 px-4 font-label-md uppercase border border-[#555] hover:border-primary whitespace-nowrap">
+          <span data-i18n="auth.show">Show</span>
+        </button>
+        <a href="https://github.com/MarshalX/yandex-music-token" target="_blank" rel="noopener"
+          class="py-2 px-4 font-label-md uppercase border border-[#555] hover:border-primary whitespace-nowrap flex items-center gap-xs text-[#d0c6ab] hover:text-primary"
+          style="text-decoration:none">
+          <span class="material-symbols-outlined" style="font-size:14px">help_outline</span>
+          <span data-i18n="auth.howto">How to get</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 2: Content Selection -->
+  <section class="col-span-12 md:col-span-4 border border-[#333] bg-[#121212] flex flex-col" style="padding:12px 16px;gap:10px">
+    <div>
+      <label class="font-label-sm uppercase text-[#d0c6ab] block mb-xs" data-i18n="content.url">URL</label>
+      <input id="url-input" type="text"
+        class="w-full border-0 border-b border-primary focus:border-b-2 focus:ring-0 text-body-md py-2 px-0 bg-transparent text-white"
+        placeholder="https://music.yandex.ru/…"/>
+    </div>
+
+    <!-- Source preview -->
+    <div class="bg-neutral-900 border border-[#333]" style="padding:10px">
+      <div class="flex items-center gap-sm">
+        <img id="source-art" class="w-16 h-16 object-cover border border-primary flex-shrink-0" alt="" style="display:none"/>
+        <div class="w-16 h-16 bg-[#222] border border-[#444] flex items-center justify-center flex-shrink-0" id="source-art-placeholder">
+          <span class="material-symbols-outlined text-[#555]">music_note</span>
+        </div>
+        <div class="min-w-0">
+          <p id="source-title" class="font-bold text-white truncate">—</p>
+          <p id="source-sub" class="font-label-sm text-[#555]" data-i18n="content.paste">Paste a URL above</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: Settings Grid -->
+  <section class="col-span-12 md:col-span-8 grid grid-cols-1 md:grid-cols-2" style="gap:12px">
+
+    <!-- Quality -->
+    <div class="border border-[#333] bg-[#121212]" style="padding:12px 16px">
+      <h3 class="font-label-sm uppercase text-[#d0c6ab] flex items-center gap-xs" style="margin-bottom:8px">
+        <span class="material-symbols-outlined" style="font-size:14px">graphic_eq</span>
+        <span data-i18n="quality.heading">Quality</span>
+      </h3>
+      <div class="space-y-sm">
+        <label class="flex items-center gap-sm cursor-pointer group">
+          <input type="radio" name="quality" value="2" checked class="w-4 h-4 border-2"/>
+          <span class="font-label-sm uppercase group-hover:text-primary text-[#f1f1f1]" data-i18n="quality.flac">FLAC Lossless</span>
+        </label>
+        <label class="flex items-center gap-sm cursor-pointer group">
+          <input type="radio" name="quality" value="1" class="w-4 h-4 border-2"/>
+          <span class="font-label-sm uppercase group-hover:text-primary text-[#f1f1f1]" data-i18n="quality.aac192">AAC 192</span>
+        </label>
+        <label class="flex items-center gap-sm cursor-pointer group">
+          <input type="radio" name="quality" value="0" class="w-4 h-4 border-2"/>
+          <span class="font-label-sm uppercase group-hover:text-primary text-[#f1f1f1]" data-i18n="quality.aac64">AAC 64</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Metadata -->
+    <div class="border border-[#333] bg-[#121212]" style="padding:12px 16px">
+      <h3 class="font-label-sm uppercase text-[#d0c6ab] flex items-center gap-xs" style="margin-bottom:8px">
+        <span class="material-symbols-outlined" style="font-size:14px">info</span>
+        <span data-i18n="meta.heading">Metadata</span>
+      </h3>
+      <div class="space-y-sm">
+        <div>
+          <label class="font-label-sm uppercase text-[#555] block mb-xs" data-i18n="meta.lyrics">Lyrics</label>
+          <select id="opt-lyrics" class="w-full border-0 border-b border-primary focus:ring-0 text-label-sm uppercase py-1 px-0 bg-transparent text-white">
+            <option class="bg-neutral-900" value="none" data-i18n="meta.lyrics.none">None</option>
+            <option class="bg-neutral-900" value="text" data-i18n="meta.lyrics.text">Text</option>
+            <option class="bg-neutral-900" value="lrc" data-i18n="meta.lyrics.lrc">LRC</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-sm cursor-pointer">
+          <input id="opt-cover" type="checkbox" checked class="w-4 h-4 border-2"/>
+          <span class="font-label-sm uppercase text-[#f1f1f1]" data-i18n="meta.cover">Embed cover art</span>
+        </label>
+        <div class="flex items-center justify-between">
+          <label class="font-label-sm uppercase text-[#555]" data-i18n="meta.covres">Cover res (px)</label>
+          <input id="cover-res" type="number" value="400"
+            class="w-20 border-0 border-b border-primary focus:ring-0 text-label-sm py-1 px-0 bg-transparent text-white"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Behavior -->
+    <div class="border border-[#333] bg-[#121212]" style="padding:12px 16px">
+      <h3 class="font-label-sm uppercase text-[#d0c6ab] flex items-center gap-xs" style="margin-bottom:8px">
+        <span class="material-symbols-outlined" style="font-size:14px">bolt</span>
+        <span data-i18n="behav.heading">Behavior</span>
+      </h3>
+      <div class="space-y-sm">
+        <label class="flex items-center gap-sm cursor-pointer">
+          <input id="opt-stick" type="checkbox" class="w-4 h-4 border-2"/>
+          <span class="font-label-sm uppercase text-[#f1f1f1]" data-i18n="behav.stick">Stick to artist only</span>
+        </label>
+        <label class="flex items-center gap-sm cursor-pointer">
+          <input id="opt-music-only" type="checkbox" checked class="w-4 h-4 border-2"/>
+          <span class="font-label-sm uppercase text-[#f1f1f1]" data-i18n="behav.music">Music albums only</span>
+        </label>
+        <div class="flex items-center justify-between">
+          <label class="font-label-sm uppercase text-[#555]" data-i18n="behav.delay">Delay (ms)</label>
+          <input id="opt-delay" type="number" value="500" min="0"
+            class="w-20 border-0 border-b border-primary focus:ring-0 text-label-sm py-1 px-0 bg-transparent text-white"/>
+        </div>
+      </div>
+    </div>
+
+    <!-- Output -->
+    <div class="border border-[#333] bg-[#121212]" style="padding:12px 16px">
+      <h3 class="font-label-sm uppercase text-[#d0c6ab] flex items-center gap-xs" style="margin-bottom:8px">
+        <span class="material-symbols-outlined" style="font-size:14px">folder_open</span>
+        <span data-i18n="out.heading">Output</span>
+      </h3>
+      <div class="space-y-sm">
+        <div>
+          <label class="font-label-sm uppercase text-[#555] block mb-xs" data-i18n="out.fname">Filename format</label>
+          <input id="filename-template" type="text" value="{track} - {title}"
+            class="w-full border-0 border-b border-primary focus:ring-0 text-label-sm py-1 px-0 bg-transparent text-white"
+            placeholder="{track} - {title}"/>
+          <p class="text-[#555]" style="font-size:10px;margin-top:8px">{title} {artist} {album} {track} {disc} {year}</p>
+        </div>
+        <p id="firefox-note" class="hidden font-label-sm text-[#666]" data-i18n="out.firefox">Firefox: batch → ZIP.</p>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- Section 4: Operations + Logs -->
+  <section class="col-span-12 grid grid-cols-1 md:grid-cols-3" style="gap:12px">
+
+    <!-- Operations panel -->
+    <div class="md:col-span-1 border border-[#333] bg-[#121212] flex flex-col" style="padding:12px 16px;gap:10px">
+      <div>
+        <div class="flex justify-between mb-xs">
+          <span class="font-label-sm uppercase text-[#d0c6ab]" data-i18n="ops.overall">Overall</span>
+          <span id="pct-overall" class="font-label-sm font-bold text-primary">0%</span>
+        </div>
+        <div class="w-full bg-[#333] h-4">
+          <div id="bar-overall" class="bg-primary h-full transition-all duration-300" style="width:0%"></div>
+        </div>
+      </div>
+      <div>
+        <div class="flex justify-between mb-xs">
+          <span class="font-label-sm uppercase text-[#d0c6ab]" data-i18n="ops.track">Track</span>
+          <span id="pct-track" class="font-label-sm font-bold text-primary">—</span>
+        </div>
+        <div class="w-full bg-[#333] h-2">
+          <div id="bar-track" class="bg-primary h-full transition-all duration-300" style="width:0%"></div>
+        </div>
+      </div>
+      <div class="flex items-center justify-between border-y border-[#333]" style="padding:6px 0">
+        <span class="font-label-sm uppercase text-[#555]" data-i18n="ops.tracks">Tracks</span>
+        <span id="counter-text" class="font-h3 text-h3 text-white">0 <span class="text-label-sm text-[#555]">/ 0</span></span>
+      </div>
+      <div class="grid grid-cols-2 gap-sm">
+        <button id="start-btn" onclick="onStart()"
+          class="bg-primary text-black font-black uppercase border border-black flex items-center justify-center gap-xs hover:bg-[#e6c200]" style="padding:10px">
+          <span class="material-symbols-outlined">play_arrow</span>
+          <span data-i18n="ops.start">Start</span>
+        </button>
+        <button id="stop-btn" onclick="onStop()" disabled
+          class="bg-transparent text-white font-black uppercase border-2 border-white flex items-center justify-center gap-xs hover:bg-neutral-800 disabled:opacity-30 disabled:cursor-not-allowed" style="padding:10px">
+          <span class="material-symbols-outlined">stop</span>
+          <span data-i18n="ops.stop">Stop</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Terminal logs -->
+    <div class="md:col-span-2 border border-[#333] bg-black flex flex-col" style="padding:12px 16px;height:280px">
+      <div class="flex justify-between items-center border-b border-neutral-800" style="padding-bottom:8px;margin-bottom:8px">
+        <span class="text-white font-label-md uppercase tracking-widest flex items-center gap-xs">
+          <span class="material-symbols-outlined text-primary" style="font-size:14px">terminal</span>
+          <span data-i18n="term.title">Logs</span>
+        </span>
+        <div class="flex items-center gap-sm">
+          <button onclick="clearLogs()" class="text-[10px] uppercase text-[#555] hover:text-white" data-i18n="term.clear">Clear</button>
+          <span id="log-status" class="text-[10px] text-[#555] font-bold uppercase" data-i18n="term.idle">Idle</span>
+        </div>
+      </div>
+      <div id="log-panel" class="flex-grow overflow-y-auto font-mono text-xs space-y-1 text-[#aaa]">
+        <p class="text-[#444] italic" data-i18n="term.ready">Ready.</p>
+      </div>
+    </div>
+
+  </section>
+
+</div><!-- /grid -->
+</div><!-- /container -->
+</main>
+
+<!-- Page footer -->
+<footer class="border-t border-[#222] bg-[#0a0a0a]" style="padding:8px 16px;margin-bottom:64px">
+  <div class="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-sm" style="gap:8px">
+    <p class="text-[10px] text-[#555] uppercase tracking-wider" data-i18n="footer.disclaimer">
+      Not affiliated with or endorsed by Yandex. Use at your own risk.
+    </p>
+    <div class="flex items-center gap-sm" style="gap:16px">
+      <a href="https://github.com/llistochek/yandex-music-downloader" target="_blank" rel="noopener"
+        class="text-[10px] uppercase text-[#555] hover:text-primary flex items-center gap-xs"
+        style="text-decoration:none;gap:4px">
+        <span class="material-symbols-outlined" style="font-size:12px">open_in_new</span>
+        <span data-i18n="footer.origin">Original project</span>
+      </a>
+      <a href="https://github.com/MarshalX/yandex-music-token" target="_blank" rel="noopener"
+        class="text-[10px] uppercase text-[#555] hover:text-primary flex items-center gap-xs"
+        style="text-decoration:none;gap:4px">
+        <span class="material-symbols-outlined" style="font-size:12px">key</span>
+        <span data-i18n="footer.token">Get token</span>
+      </a>
+      <a href="https://github.com/MarshalX/yandex-music-api" target="_blank" rel="noopener"
+        class="text-[10px] uppercase text-[#555] hover:text-primary flex items-center gap-xs"
+        style="text-decoration:none;gap:4px">
+        <span class="material-symbols-outlined" style="font-size:12px">library_music</span>
+        <span data-i18n="footer.api">Yandex Music API</span>
+      </a>
+    </div>
+  </div>
+</footer>
+
+<!-- Mobile footer -->
+<footer class="md:hidden fixed bottom-0 left-0 w-full bg-black border-t-2 border-white h-16 flex items-center justify-around z-50">
+  <button onclick="onStart()" class="flex flex-col items-center gap-xs text-white border-b-2 border-primary px-2">
+    <span class="material-symbols-outlined">download</span>
+    <span class="text-[10px] font-black uppercase" data-i18n="ops.start">Download</span>
+  </button>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/npm/browser-id3-writer@4.4.0/dist/browser-id3-writer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="yandex-api.js"></script>
+<script src="downloader.js"></script>
+<script>
+// ── Translations ─────────────────────────────────────────────────────────────
+const TRANSLATIONS = {
+  en: {
+    'auth.token':        'OAuth Token',
+    'auth.show':         'Show',
+    'auth.hide':         'Hide',
+    'auth.howto':        'How to get',
+    'auth.placeholder':  'y0__xC…',
+    'content.url':       'URL',
+    'content.paste':     'Paste a URL above',
+    'quality.heading':   'Quality',
+    'quality.flac':      'FLAC Lossless',
+    'quality.aac192':    'AAC 192',
+    'quality.aac64':     'AAC 64',
+    'meta.heading':      'Metadata',
+    'meta.lyrics':       'Lyrics',
+    'meta.lyrics.none':  'None',
+    'meta.lyrics.text':  'Text',
+    'meta.lyrics.lrc':   'LRC',
+    'meta.cover':        'Embed cover art',
+    'meta.covres':       'Cover res (px)',
+    'behav.heading':     'Behavior',
+    'behav.stick':       'Stick to artist only',
+    'behav.music':       'Music albums only',
+    'behav.delay':       'Delay (ms)',
+    'out.heading':       'Output',
+    'out.folder':        'Folder',
+    'out.browse':        'Browse',
+    'out.folder.prompt': 'Will prompt on first download',
+    'out.fname':         'Filename format',
+    'out.firefox':       'Firefox: batch → ZIP.',
+    'ops.overall':       'Overall',
+    'ops.track':         'Track',
+    'ops.tracks':        'Tracks',
+    'ops.start':         'Start',
+    'ops.stop':          'Stop',
+    'term.title':        'Logs',
+    'term.clear':        'Clear',
+    'term.idle':         'Idle',
+    'term.running':      'Running',
+    'term.ready':        'Ready.',
+    'log.token.missing': 'Enter your OAuth token first.',
+    'log.url.missing':   'Enter a Yandex Music URL or ID.',
+    'log.parse.fail':    'Could not parse URL — paste a full music.yandex.ru link.',
+    'log.no.tracks':     'No downloadable tracks found.',
+    'log.found':         'Found',
+    'log.tracks':        'track(s). Starting downloads…',
+    'log.stopped':       'Stopped by user.',
+    'log.stopped.track': 'stopped.',
+    'log.failed':        'failed:',
+    'log.saved':         'Saved:',
+    'log.ready':         'Ready:',
+    'log.zip.building':  'Building ZIP:',
+    'log.zip.done':      'ZIP downloaded.',
+    'log.all.done':      'All done!',
+    'log.folder.set':    'Output folder set:',
+    'log.folder.nosup':  'showDirectoryPicker not supported — batch will download as ZIP.',
+    'log.folder.err':    'Folder picker error:',
+    'log.unhandled':     'Unhandled error:',
+    'log.resolving':     'Resolving',
+    'log.returned':      'item(s).',
+    'footer.disclaimer': 'Not affiliated with or endorsed by Yandex. Use at your own risk.',
+    'footer.origin':     'Original project',
+    'footer.token':      'Get token',
+    'footer.api':        'Yandex Music API',
+  },
+  ru: {
+    'auth.token':        'OAuth Токен',
+    'auth.show':         'Показать',
+    'auth.hide':         'Скрыть',
+    'auth.howto':        'Как получить',
+    'auth.placeholder':  'y0__xC…',
+    'content.url':       'Ссылка',
+    'content.paste':     'Вставьте ссылку выше',
+    'quality.heading':   'Качество',
+    'quality.flac':      'FLAC Без потерь',
+    'quality.aac192':    'AAC 192',
+    'quality.aac64':     'AAC 64',
+    'meta.heading':      'Метаданные',
+    'meta.lyrics':       'Текст песни',
+    'meta.lyrics.none':  'Нет',
+    'meta.lyrics.text':  'Текст',
+    'meta.lyrics.lrc':   'LRC',
+    'meta.cover':        'Встроить обложку',
+    'meta.covres':       'Размер обложки (пкс)',
+    'behav.heading':     'Поведение',
+    'behav.stick':       'Только треки исполнителя',
+    'behav.music':       'Только музыкальные альбомы',
+    'behav.delay':       'Задержка (мс)',
+    'out.heading':       'Вывод',
+    'out.folder':        'Папка',
+    'out.browse':        'Обзор',
+    'out.folder.prompt': 'Запросит при первой загрузке',
+    'out.fname':         'Формат имени файла',
+    'out.firefox':       'Firefox: пакет → ZIP.',
+    'ops.overall':       'Всего',
+    'ops.track':         'Трек',
+    'ops.tracks':        'Треки',
+    'ops.start':         'Старт',
+    'ops.stop':          'Стоп',
+    'term.title':        'Журнал',
+    'term.clear':        'Очистить',
+    'term.idle':         'Готов',
+    'term.running':      'Выполняется',
+    'term.ready':        'Готово.',
+    'log.token.missing': 'Сначала введите OAuth-токен.',
+    'log.url.missing':   'Введите ссылку или ID Яндекс Музыки.',
+    'log.parse.fail':    'Не удалось разобрать ссылку — вставьте полный адрес music.yandex.ru.',
+    'log.no.tracks':     'Загружаемые треки не найдены.',
+    'log.found':         'Найдено',
+    'log.tracks':        'трек(ов). Начинаем загрузку…',
+    'log.stopped':       'Остановлено пользователем.',
+    'log.stopped.track': 'остановлен.',
+    'log.failed':        'ошибка:',
+    'log.saved':         'Сохранено:',
+    'log.ready':         'Готово:',
+    'log.zip.building':  'Создание ZIP:',
+    'log.zip.done':      'ZIP скачан.',
+    'log.all.done':      'Всё готово!',
+    'log.folder.set':    'Папка для сохранения:',
+    'log.folder.nosup':  'showDirectoryPicker не поддерживается — пакет скачается как ZIP.',
+    'log.folder.err':    'Ошибка выбора папки:',
+    'log.unhandled':     'Необработанная ошибка:',
+    'log.resolving':     'Определяем',
+    'log.returned':      'элем.',
+    'footer.disclaimer': 'Не является частью Яндекса и не аффилирована с ним. Используйте на свой страх и риск.',
+    'footer.origin':     'Оригинальный проект',
+    'footer.token':      'Получить токен',
+    'footer.api':        'API Яндекс Музыки',
+  }
+};
+
+function t(key) {
+  return (TRANSLATIONS[currentLang] || TRANSLATIONS.en)[key] || TRANSLATIONS.en[key] || key;
+}
+
+// ── State ────────────────────────────────────────────────────────────────────
+let tracks   = [];
+let isRunning = false;
+let isDark    = true;
+let currentLang = 'en';
+let _downloadAbort = null;
+
+// Catch uncaught promise rejections and surface them in the log panel
+window.addEventListener('unhandledrejection', e => {
+  const r = e.reason;
+  const msg = r instanceof Error ? r.message : (typeof r === 'string' ? r : JSON.stringify(r));
+  log(t('log.unhandled') + ' ' + msg, 'ERR');
+  console.error('unhandledrejection:', r);
+});
+
+// ── Theme ────────────────────────────────────────────────────────────────────
+function applyTheme(dark) {
+  isDark = dark;
+  document.documentElement.classList.toggle('dark', dark);
+  document.getElementById('theme-icon').textContent = dark ? 'light_mode' : 'dark_mode';
+  try { localStorage.setItem('ym_theme', dark ? 'dark' : 'light'); } catch {}
+}
+function toggleTheme() { applyTheme(!isDark); }
+
+// Restore saved theme (default: dark)
+applyTheme(localStorage.getItem('ym_theme') !== 'light');
+
+// ── Language ─────────────────────────────────────────────────────────────────
+function applyLang(lang) {
+  currentLang = lang;
+  document.documentElement.lang = lang;
+  document.getElementById('lang-label').textContent = lang === 'en' ? 'RU' : 'EN';
+
+  // Translate text content
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.dataset.i18n);
+  });
+
+  // Translate placeholders
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.dataset.i18nPlaceholder);
+  });
+
+  // Update log-status if idle
+  if (!isRunning) {
+    const ls = document.getElementById('log-status');
+    ls.textContent = t('term.idle');
+  }
+
+  try { localStorage.setItem('ym_lang', lang); } catch {}
+}
+function toggleLang() { applyLang(currentLang === 'en' ? 'ru' : 'en'); }
+
+// Restore saved language (default: en)
+applyLang(localStorage.getItem('ym_lang') || 'en');
+
+// ── Token ────────────────────────────────────────────────────────────────────
+function togglePw() {
+  const inp = document.getElementById('token');
+  const btn = event.currentTarget.querySelector('[data-i18n]') || event.currentTarget;
+  if (inp.type === 'password') {
+    inp.type = 'text';
+    btn.textContent = t('auth.hide');
+    btn.dataset.i18n = 'auth.hide';
+  } else {
+    inp.type = 'password';
+    btn.textContent = t('auth.show');
+    btn.dataset.i18n = 'auth.show';
+  }
+}
+function getToken()   { return document.getElementById('token').value.trim(); }
+function saveToken(t) { try { localStorage.setItem('ym_token', t); } catch {} }
+function loadToken()  { try { return localStorage.getItem('ym_token') || ''; } catch { return ''; } }
+document.getElementById('token').value = loadToken();
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+// Guarantee a quality radio is always checked (Firefox form-restore can clear it)
+(function () {
+  if (!document.querySelector('input[name=quality]:checked')) {
+    const el = document.querySelector('input[name=quality][value="2"]');
+    if (el) el.checked = true;
+  }
+})();
+
+function getQuality() {
+  return parseInt(document.querySelector('input[name=quality]:checked')?.value ?? '2');
+}
+function getOpts() {
+  const lyrFmt = document.getElementById('opt-lyrics')?.value || 'none';
+  return {
+    embedCover:       document.getElementById('opt-cover')?.checked ?? true,
+    fetchLyrics:      lyrFmt !== 'none',
+    filenameTemplate: document.getElementById('filename-template')?.value?.trim() || '',
+  };
+}
+function getDelay()    { return parseInt(document.getElementById('opt-delay')?.value) || 0; }
+function getCoverRes() { return parseInt(document.getElementById('cover-res')?.value) || 400; }
+
+// ── Logging ───────────────────────────────────────────────────────────────────
+function log(msg, level = 'INFO') {
+  const panel = document.getElementById('log-panel');
+  const time  = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const cls   = { INFO:'log-info', OK:'log-ok', WARN:'log-warn', ERR:'log-err' }[level] || 'log-info';
+  const p = document.createElement('p');
+  p.innerHTML = `<span class="text-[#555]">[${time}]</span> <span class="${cls} font-bold">${level}:</span> ${esc(msg)}`;
+  panel.appendChild(p);
+  panel.scrollTop = panel.scrollHeight;
+}
+function clearLogs() {
+  document.getElementById('log-panel').innerHTML = '';
+}
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Progress ──────────────────────────────────────────────────────────────────
+function setOverallProgress(done, total) {
+  const pct = total ? Math.round(done / total * 100) : 0;
+  document.getElementById('bar-overall').style.width = pct + '%';
+  document.getElementById('pct-overall').textContent = pct + '%';
+  document.getElementById('counter-text').innerHTML =
+    `${done} <span class="text-label-sm text-[#555]">/ ${total}</span>`;
+}
+function setTrackProgress(pct) {
+  document.getElementById('bar-track').style.width = (pct * 100) + '%';
+  document.getElementById('pct-track').textContent = Math.round(pct * 100) + '%';
+}
+
+// ── Source preview ────────────────────────────────────────────────────────────
+function setSourcePreview(title, sub, artUrl) {
+  document.getElementById('source-title').textContent = title || 'Unknown';
+  document.getElementById('source-sub').textContent   = sub   || '';
+  const img = document.getElementById('source-art');
+  const ph  = document.getElementById('source-art-placeholder');
+  if (artUrl) {
+    img.src = artUrl; img.style.display = 'block'; ph.style.display = 'none';
+  } else {
+    img.style.display = 'none'; ph.style.display = 'flex';
+  }
+}
+
+// Show ZIP note on Firefox
+if (!('showDirectoryPicker' in window)) {
+  document.getElementById('firefox-note').classList.remove('hidden');
+}
+
+// ── Controls state ────────────────────────────────────────────────────────────
+function setRunning(running) {
+  isRunning = running;
+  document.getElementById('start-btn').disabled = running;
+  document.getElementById('stop-btn').disabled  = !running;
+  const statusText = running ? t('term.running') : t('term.idle');
+  document.getElementById('log-status').textContent = statusText;
+  document.getElementById('log-status').className   =
+    'text-[10px] font-bold uppercase ' + (running ? 'text-primary animate-pulse' : 'text-[#555]');
+}
+
+// ── Download one track ────────────────────────────────────────────────────────
+async function downloadOne(i) {
+  const track = tracks[i];
+  const token = getToken();
+  if (!token) { log(t('log.token.missing'), 'ERR'); return; }
+
+  setTrackProgress(0);
+  try {
+    const { bytes, filename } = await downloadTrack(
+      track, token, getQuality(), getOpts(),
+      msg => {
+        log(msg);
+        const m = msg.match(/(\d+)%/);
+        if (m) setTrackProgress(parseInt(m[1]) / 100);
+      },
+      _downloadAbort?.signal
+    );
+    await saveFile(bytes, filename);
+    setTrackProgress(1);
+    log(t('log.saved') + ' ' + filename, 'OK');
+  } catch (e) {
+    if (e.name === 'AbortError') {
+      log(`Track ${i+1} ${t('log.stopped.track')}`, 'WARN');
+    } else {
+      const msg = e instanceof Error ? e.message : JSON.stringify(e);
+      log(`Track ${i+1} ${t('log.failed')} ${msg}`, 'ERR');
+      console.error(e);
+    }
+  }
+}
+
+// ── Main Start flow ────────────────────────────────────────────────────────────
+async function onStart() {
+  if (isRunning) return;
+  const token = getToken();
+  const url   = document.getElementById('url-input').value.trim();
+  if (!token) { log(t('log.token.missing'), 'ERR'); return; }
+  if (!url)   { log(t('log.url.missing'), 'ERR'); return; }
+
+  saveToken(token);
+  setRunning(true);
+  setOverallProgress(0, 0);
+  setTrackProgress(0);
+
+  try {
+    const parsed = parseYandexUrl(url);
+    if (!parsed) { log(t('log.parse.fail'), 'ERR'); return; }
+
+    log(`${t('log.resolving')} ${parsed.type}…`);
+    const list = await resolveTracklist(parsed, token, msg => log(msg));
+    log(`resolveTracklist returned ${list?.length ?? 'null'} ${t('log.returned')}`);
+
+    if (!list?.length) { log(t('log.no.tracks'), 'WARN'); return; }
+
+    tracks = list;
+    log(`${t('log.found')} ${list.length} ${t('log.tracks')}`);
+    setOverallProgress(0, list.length);
+
+    // Update source preview from first track
+    if (list[0]) {
+      const m = extractMeta(list[0]);
+      const art = m.coverUri ? `https://${m.coverUri.replace('%%','200x200')}` : '';
+      setSourcePreview(m.album || m.title, (m.albumArtists[0] || m.artists[0]) + ` · ${list.length} tracks`, art);
+    }
+
+    _downloadAbort = new AbortController();
+
+    if ('showDirectoryPicker' in window) {
+      // Chrome/Edge: pick folder once, save silently
+      for (let i = 0; i < list.length; i++) {
+        if (!isRunning) { log(t('log.stopped'), 'WARN'); break; }
+        await downloadOne(i);
+        setOverallProgress(i + 1, list.length);
+        if (i < list.length - 1) await delay(getDelay());
+      }
+    } else {
+      // Firefox: collect all, download as single ZIP
+      const items = [];
+      for (let i = 0; i < list.length; i++) {
+        if (!isRunning) { log(t('log.stopped'), 'WARN'); break; }
+        try {
+          const result = await downloadTrack(
+            tracks[i], token, getQuality(), getOpts(),
+            msg => log(msg),
+            _downloadAbort?.signal
+          );
+          items.push(result);
+          log(t('log.ready') + ' ' + result.filename, 'OK');
+        } catch (e) {
+          if (e.name === 'AbortError') { log(`Track ${i+1} ${t('log.stopped.track')}`, 'WARN'); break; }
+          log(`Track ${i+1} ${t('log.failed')} ${e.message}`, 'ERR');
+        }
+        setOverallProgress(i + 1, list.length);
+        if (i < list.length - 1) await delay(getDelay());
+      }
+      if (items.length) {
+        const zipName = (extractMeta(list[0]).album || 'yandex-music') + '.zip';
+        log(`${t('log.zip.building')} ${zipName}…`);
+        await saveAsZip(items, zipName);
+        log(t('log.zip.done'), 'OK');
+      }
+    }
+
+    if (isRunning) log(t('log.all.done'), 'OK');
+
+  } catch (e) {
+    log(e instanceof Error ? e.message : JSON.stringify(e), 'ERR');
+    console.error(e);
+  } finally {
+    setRunning(false);
+  }
+}
+
+function onStop() {
+  isRunning = false;
+  _downloadAbort?.abort();
+  _downloadAbort = null;
+}
+
+function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Enter in URL field triggers Start
+document.getElementById('url-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') onStart();
+});
+</script>
+</body>
+</html>
