@@ -1,4 +1,6 @@
 node_modules/
-public/lib/
+dist/
 .vercel/
 *.log
+
+.vercel
