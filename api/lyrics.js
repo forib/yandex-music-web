@@ -16,9 +16,13 @@ module.exports = async (req, res) => {
 
   const auth = req.headers['authorization'];
   try {
-    const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}`;
+    // Lyrics require a signed request (timeStamp+sign), see _lib.getSignRequest.
+    // Like get-file-info, lyrics gate by client: Android headers (403 otherwise).
+    const { getSignRequest, ANDROID_HEADERS } = require('./_lib');
+    const { timeStamp, sign } = getSignRequest(trackId);
+    const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}&timeStamp=${timeStamp}&sign=${encodeURIComponent(sign)}`;
     const upstream = await fetchWithTimeout(url, {
-      headers: { ...YANDEX_HEADERS, ...(auth ? { Authorization: auth } : {}) },
+      headers: { ...ANDROID_HEADERS, ...(auth ? { Authorization: auth } : {}) },
     });
     const data = await upstream.json();
     res.status(upstream.status).json(data);

@@ -106,16 +106,18 @@ app.get(['/playlist', '/api/playlist'], async (req, res) => {
   }
 });
 
-// Fetch lyrics (avoids CORS)
+// Fetch lyrics (avoids CORS) — signed request, see _lib.getSignRequest
 app.get(['/lyrics', '/api/lyrics'], async (req, res) => {
   const { trackId, format = 'TEXT' } = req.query;
   if (!trackId) return res.status(400).json({ error: 'trackId required' });
 
   const auth = req.headers['authorization'];
   try {
-    const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}`;
+    const { getSignRequest, ANDROID_HEADERS } = require('./_lib');
+    const { timeStamp, sign } = getSignRequest(trackId);
+    const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}&timeStamp=${timeStamp}&sign=${encodeURIComponent(sign)}`;
     const upstream = await fetchWithTimeout(url, {
-      headers: { ...YANDEX_HEADERS, ...(auth ? { Authorization: auth } : {}) },
+      headers: { ...ANDROID_HEADERS, ...(auth ? { Authorization: auth } : {}) },
     });
     const data = await upstream.json();
     res.status(upstream.status).json(data);
