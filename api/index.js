@@ -124,4 +124,18 @@ app.get(['/lyrics', '/api/lyrics'], async (req, res) => {
   }
 });
 
+// New get-file-info endpoint (HMAC-signed, encraw) — returns decryption key
+app.get(['/file-info', '/api/file-info'], async (req, res) => {
+  const { trackId, quality = '2' } = req.query;
+  if (!trackId) return res.status(400).json({ error: 'trackId required' });
+
+  const auth = req.headers['authorization'];
+  try {
+    const { getFileInfo } = require('./_lib');
+    res.json(await getFileInfo(trackId, parseInt(quality, 10), auth));
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 module.exports = app;
