@@ -2,9 +2,12 @@
 
 const FILE_FORMAT_MAP = {
   'flac':       { container: 'flac', codec: 'flac' },
+  'flac-mp4':   { container: 'm4a',  codec: 'flac' },
   'mp3':        { container: 'mp3',  codec: 'mp3'  },
   'aac':        { container: 'm4a',  codec: 'aac'  },
-  'he-aac':     { container: 'm4a',  codec: 'he-aac' },
+  'he-aac':     { container: 'm4a',  codec: 'aac'  },
+  'aac-mp4':    { container: 'm4a',  codec: 'aac'  },
+  'he-aac-mp4': { container: 'm4a',  codec: 'aac'  },
 };
 
 // quality selector value → preferred quality string in download-info response
@@ -35,6 +38,20 @@ async function apiGet(apiPath, params, token) {
 }
 
 async function getTrackDownloadInfo(trackId, token, qualityLevel = 2) {
+  // Prefer the new get-file-info endpoint (HMAC-signed, encraw transport):
+  // it returns a decryption `key` for encrypted (lossless) tracks.
+  // Falls back to legacy download-info when file-info is unavailable.
+  try {
+    const res = await fetch(
+      `/api/file-info?trackId=${encodeURIComponent(trackId)}&quality=${qualityLevel}`,
+      { headers: authHeader(token) }
+    );
+    if (res.ok) {
+      const info = await res.json();
+      if (info?.urls?.length) return info;
+    }
+  } catch (_) { /* fall through to legacy */ }
+
   const data = await apiGet(`tracks/${trackId}/download-info`, {}, token);
   const options = data.result;
   if (!options?.length) throw new Error('No download options returned');

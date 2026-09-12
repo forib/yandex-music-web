@@ -132,6 +132,21 @@ app.get('/api/lyrics', async (req, res) => {
   }
 });
 
+// New get-file-info endpoint (HMAC-signed, encraw) — returns decryption key.
+// Port of ymd/api.py::get_download_info from yandex-music-downloader.
+app.get('/api/file-info', async (req, res) => {
+  const { trackId, quality = '2' } = req.query;
+  if (!trackId) return res.status(400).json({ error: 'trackId required' });
+
+  const auth = req.headers['authorization'];
+  try {
+    const { getFileInfo } = require('./api/_lib');
+    res.json(await getFileInfo(trackId, parseInt(quality, 10), auth));
+  } catch (e) {
+    res.status(502).json({ error: e.message });
+  }
+});
+
 // ── Download CDN libs once, serve locally ────────────────────────────────────
 const fs = require('fs');
 const LIB_DIR = path.join(__dirname, 'public', 'lib');
