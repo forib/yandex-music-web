@@ -270,12 +270,13 @@ async function getPublicPlaylist(playlistId, token) {
 }
 
 async function getLyrics(trackId, token, format = 'TEXT') {
-  const res = await fetch(`/api/lyrics?trackId=${trackId}&format=${format}`, {
+  // Two-step fetch happens server-side (S3 pre-signed URL has no CORS).
+  const res = await fetch(`/api/lyrics-text?trackId=${trackId}&format=${format}`, {
     headers: authHeader(token),
   });
   if (!res.ok) return null;
   const data = await res.json();
-  return data.result?.lyrics || null;
+  return data.lyrics || null;
 }
 
 // ── URL parsing ───────────────────────────────────────────────────────────────

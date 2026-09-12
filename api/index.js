@@ -45,8 +45,9 @@ app.get(['/stream', '/api/stream'], async (req, res) => {
   if (!url) return res.status(400).json({ error: 'url required' });
 
   try {
-    const upstream = await fetchWithTimeout(decodeURIComponent(url), {}, 60000);
-    if (!upstream.ok) return res.status(upstream.status).end();
+    // Retry transient CDN 5xx (seen live on fresh signed URLs)
+    const { fetchWithRetry } = require('./_lib');
+    const upstream = await fetchWithRetry(decodeURIComponent(url));
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/octet-stream');
     const cl = upstream.headers.get('content-length');
     if (cl) res.setHeader('Content-Length', cl);
@@ -121,6 +122,32 @@ app.get(['/lyrics', '/api/lyrics'], async (req, res) => {
     });
     const data = await upstream.json();
     res.status(upstream.status).json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Lyrics text content (two-step: signed meta + pre-signed S3 download, no CORS)
+app.get(['/lyrics-text', '/api/lyrics-text'], async (req, res) => {
+  const { trackId, format = 'TEXT' } = req.query;
+  if (!trackId) return res.status(400).json({ error: 'trackId required' });
+
+  const auth = req.headers['authorization'];
+  try {
+    const { getSignRequest, ANDROID_HEADERS } = require('./_lib');
+    const { timeStamp, sign } = getSignRequest(trackId);
+    const metaUrl =
+      `${YANDEX_API}/tracks/${trackId}/lyrics` +
+      `?format=${format}&timeStamp=${timeStamp}&sign=${encodeURIComponent(sign)}`;
+    const meta = await fetchWithTimeout(metaUrl, {
+      headers: { ...ANDROID_HEADERS, ...(auth ? { Authorization: auth } : {}) },
+    });
+    if (!meta.ok) return res.status(meta.status).json({ error: `lyrics meta HTTP ${meta.status}` });
+    const downloadUrl = (await meta.json())?.result?.downloadUrl;
+    if (!downloadUrl) return res.status(404).json({ error: 'no lyrics for this track' });
+    const textRes = await fetchWithTimeout(downloadUrl, {}, 30000);
+    if (!textRes.ok) return res.status(502).json({ error: `lyrics download HTTP ${textRes.status}` });
+    res.json({ lyrics: await textRes.text() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

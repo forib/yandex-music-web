@@ -20,6 +20,24 @@ function fetchWithTimeout(url, opts = {}, ms = 30000) {
   return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
 }
 
+// GET with retries on 5xx/429/network errors.
+// Mirrors ymd/core.py::init_client retry wrapper (tries + backoff).
+// CDN edge nodes occasionally answer 500 on fresh signed URLs (seen live).
+async function fetchWithRetry(url, opts = {}, ms = 60000, tries = 3) {
+  let lastErr = new Error('no attempts');
+  for (let a = 0; a < tries; a++) {
+    try {
+      const r = await fetchWithTimeout(url, opts, ms);
+      if (r.ok || (r.status < 500 && r.status !== 429)) return r;
+      lastErr = new Error(`HTTP ${r.status}`);
+    } catch (e) {
+      lastErr = e;
+    }
+    await new Promise(r => setTimeout(r, 2000 * (a + 1)));
+  }
+  throw lastErr;
+}
+
 // ── get-file-info (port of ymd/api.py::get_download_info) ────────────────────
 // New endpoint for lossless (encraw transport). The legacy `download-info`
 // endpoint used by getTrackDownloadInfo() has no decryption key, so FLAC
@@ -108,6 +126,7 @@ module.exports = {
   YANDEX_HEADERS,
   ANDROID_HEADERS,
   fetchWithTimeout,
+  fetchWithRetry,
   FILE_FORMAT_MAP,
   getFileInfo,
   getSignRequest,
