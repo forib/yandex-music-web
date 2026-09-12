@@ -18,23 +18,34 @@ function authHeader(token) {
   return token ? { 'Authorization': `OAuth ${token}` } : {};
 }
 
-async function apiGet(apiPath, params, token) {
+async function apiGet(apiPath, params, token, tries = 5) {
   const qs = new URLSearchParams({ path: apiPath, ...params }).toString();
-  const res = await fetch(`/api/proxy?${qs}`, { headers: authHeader(token) });
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); }
-  catch { throw new Error(`${res.status} on ${apiPath}: non-JSON response: ${text.slice(0, 200)}`); }
-  if (!res.ok) {
-    const pick = v => (typeof v === 'string' && v) || null;
-    const detail =
-      pick(data?.result?.message) ||
-      pick(data?.error?.message)  ||
-      pick(data?.error)           ||
-      JSON.stringify(data).slice(0, 300);
-    throw new Error(`${res.status} on ${apiPath}: ${detail}`);
+  let lastErr;
+  for (let a = 0; a < tries; a++) {
+    const res = await fetch(`/api/proxy?${qs}`, { headers: authHeader(token) });
+    // 429 = Yandex concurrency limit: back off and retry (large playlists
+    // fetch dozens of batches in a row and trip it regularly).
+    if (res.status === 429) {
+      lastErr = new Error(`429 on ${apiPath}: concurrency limit exceeded`);
+      await new Promise(r => setTimeout(r, 1500 * (a + 1)));
+      continue;
+    }
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error(`${res.status} on ${apiPath}: non-JSON response: ${text.slice(0, 200)}`); }
+    if (!res.ok) {
+      const pick = v => (typeof v === 'string' && v) || null;
+      const detail =
+        pick(data?.result?.message) ||
+        pick(data?.error?.message)  ||
+        pick(data?.error)           ||
+        JSON.stringify(data).slice(0, 300);
+      throw new Error(`${res.status} on ${apiPath}: ${detail}`);
+    }
+    return data;
   }
-  return data;
+  throw lastErr;
 }
 
 async function getTrackDownloadInfo(trackId, token, qualityLevel = 2) {
@@ -106,6 +117,8 @@ async function getUserPlaylist(owner, kind, token) {
 
 async function getTracksById(trackIds, token) {
   const data = await apiGet('tracks', { trackIds: trackIds.join(',') }, token);
+  // Small pause between batches: back-to-back catalog calls trip Yandex 429s.
+  await new Promise(r => setTimeout(r, 400));
   return data.result || [];
 }
 
@@ -170,8 +183,6 @@ async function getPublicPlaylist(playlistId, token) {
     const raw = data.result;
     const refs = Array.isArray(raw) ? raw
                : (raw?.library?.playlists || raw?.playlists || []);
-    console.log('[likes/playlists] count:', refs.length,
-                'first 3:', JSON.stringify(refs.slice(0, 3)));
 
     // Fast path: some responses include full playlist objects with playlistUuid
     const directMatch = refs.find(r =>

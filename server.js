@@ -29,7 +29,10 @@ app.get('/api/proxy', async (req, res) => {
     for (const [k, v] of Object.entries(queryParams)) url.searchParams.set(k, v);
 
     console.log(`→ ${url.toString()}`);
-    const upstream = await fetchWithTimeout(url.toString(), {
+    // fetchWithRetry absorbs transient 429/5xx; persistent 429 re-surfaced
+    // with its status so the browser can back off too (see apiGet).
+    const { fetchWithRetry } = require('./api/_lib');
+    const upstream = await fetchWithRetry(url.toString(), {
       headers: { ...YANDEX_HEADERS, ...(auth ? { Authorization: auth } : {}) },
     });
     const text = await upstream.text();
@@ -39,7 +42,8 @@ app.get('/api/proxy', async (req, res) => {
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
     res.status(upstream.status).json(data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const m = String((e && e.message) || '').match(/^HTTP (\d{3})$/);
+    res.status(m ? Number(m[1]) : 500).json({ error: e.message });
   }
 });
 
