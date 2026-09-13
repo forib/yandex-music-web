@@ -41,8 +41,15 @@
           placeholder="y0__xC…"/>
       </div>
       <div class="flex items-center gap-sm flex-shrink-0">
+        <label class="flex items-center gap-xs text-label-sm uppercase text-[#d0c6ab] whitespace-nowrap" title="Keep token after tab closes">
+          <input id="opt-remember" type="checkbox" class="w-4 h-4"/>
+          <span data-i18n="auth.remember">Remember</span>
+        </label>
         <button onclick="togglePw()" class="bg-transparent text-white py-2 px-4 font-label-md uppercase border border-[#555] hover:border-primary whitespace-nowrap">
           <span data-i18n="auth.show">Show</span>
+        </button>
+        <button onclick="forgetToken()" class="bg-transparent text-white py-2 px-4 font-label-md uppercase border border-[#555] hover:border-primary whitespace-nowrap">
+          <span data-i18n="auth.forget">Forget</span>
         </button>
         <a href="https://github.com/MarshalX/yandex-music-token" target="_blank" rel="noopener"
           class="py-2 px-4 font-label-md uppercase border border-[#555] hover:border-primary whitespace-nowrap flex items-center gap-xs text-[#d0c6ab] hover:text-primary"
@@ -150,6 +157,15 @@
           <input id="opt-delay" type="number" value="500" min="0"
             class="w-20 border-0 border-b border-primary focus:ring-0 text-label-sm py-1 px-0 bg-transparent text-white"/>
         </div>
+        <div class="flex items-center justify-between">
+          <label class="font-label-sm uppercase text-[#555]" data-i18n="behav.conc">Parallel (1–5)</label>
+          <input id="opt-conc" type="number" value="3" min="1" max="5"
+            class="w-20 border-0 border-b border-primary focus:ring-0 text-label-sm py-1 px-0 bg-transparent text-white"/>
+        </div>
+        <label class="flex items-center gap-sm cursor-pointer">
+          <input id="opt-skip" type="checkbox" class="w-4 h-4 border-2"/>
+          <span class="font-label-sm uppercase text-[#f1f1f1]" data-i18n="behav.skip">Skip existing files</span>
+        </label>
       </div>
     </div>
 
@@ -162,10 +178,10 @@
       <div class="space-y-sm">
         <div>
           <label class="font-label-sm uppercase text-[#555] block mb-xs" data-i18n="out.fname">Filename format</label>
-          <input id="filename-template" type="text" value="{track} - {title}"
+          <input id="filename-template" type="text" value="{album_artist}/{album}/{track} - {title}"
             class="w-full border-0 border-b border-primary focus:ring-0 text-label-sm py-1 px-0 bg-transparent text-white"
             placeholder="{track} - {title}"/>
-          <p class="text-[#555]" style="font-size:10px;margin-top:8px">{title} {artist} {album} {track} {disc} {year}</p>
+          <p class="text-[#555]" style="font-size:10px;margin-top:8px">{title} {artist} {album} {album_artist} {track} {disc} {year} — "/" creates folders</p>
         </div>
         <p id="firefox-note" class="hidden font-label-sm text-[#666]" data-i18n="out.firefox">Firefox: batch → ZIP.</p>
       </div>
@@ -212,6 +228,11 @@
           <span data-i18n="ops.stop">Stop</span>
         </button>
       </div>
+      <button id="retry-btn" onclick="onRetry()" style="display:none;padding:10px"
+        class="bg-transparent text-primary font-black uppercase border border-primary flex items-center justify-center gap-xs hover:bg-neutral-900 w-full">
+        <span class="material-symbols-outlined">replay</span>
+        <span data-i18n="ops.retry">Retry failed</span>
+      </button>
     </div>
 
     <!-- Terminal logs -->
@@ -286,6 +307,8 @@ const TRANSLATIONS = {
     'auth.show':         'Show',
     'auth.hide':         'Hide',
     'auth.howto':        'How to get',
+    'auth.remember':     'Remember',
+    'auth.forget':       'Forget',
     'auth.placeholder':  'y0__xC…',
     'content.url':       'URL',
     'content.paste':     'Paste a URL above',
@@ -304,6 +327,8 @@ const TRANSLATIONS = {
     'behav.stick':       'Stick to artist only',
     'behav.music':       'Music albums only',
     'behav.delay':       'Delay (ms)',
+    'behav.conc':        'Parallel (1–5)',
+    'behav.skip':        'Skip existing files',
     'out.heading':       'Output',
     'out.folder':        'Folder',
     'out.browse':        'Browse',
@@ -315,12 +340,14 @@ const TRANSLATIONS = {
     'ops.tracks':        'Tracks',
     'ops.start':         'Start',
     'ops.stop':          'Stop',
+    'ops.retry':         'Retry failed',
     'term.title':        'Logs',
     'term.clear':        'Clear',
     'term.idle':         'Idle',
     'term.running':      'Running',
     'term.ready':        'Ready.',
     'log.token.missing': 'Enter your OAuth token first.',
+    'log.token.forgot':  'Token forgotten.',
     'log.url.missing':   'Enter a Yandex Music URL or ID.',
     'log.parse.fail':    'Could not parse URL — paste a full music.yandex.ru link.',
     'log.no.tracks':     'No downloadable tracks found.',
@@ -329,6 +356,8 @@ const TRANSLATIONS = {
     'log.stopped':       'Stopped by user.',
     'log.stopped.track': 'stopped.',
     'log.failed':        'failed:',
+    'log.skipped':       'skipped (exists):',
+    'log.retry':         'Retrying failed tracks:',
     'log.saved':         'Saved:',
     'log.ready':         'Ready:',
     'log.zip.building':  'Building ZIP:',
@@ -350,6 +379,8 @@ const TRANSLATIONS = {
     'auth.show':         'Показать',
     'auth.hide':         'Скрыть',
     'auth.howto':        'Как получить',
+    'auth.remember':     'Запомнить',
+    'auth.forget':       'Забыть',
     'auth.placeholder':  'y0__xC…',
     'content.url':       'Ссылка',
     'content.paste':     'Вставьте ссылку выше',
@@ -368,6 +399,8 @@ const TRANSLATIONS = {
     'behav.stick':       'Только треки исполнителя',
     'behav.music':       'Только музыкальные альбомы',
     'behav.delay':       'Задержка (мс)',
+    'behav.conc':        'Параллельно (1–5)',
+    'behav.skip':        'Пропускать готовые',
     'out.heading':       'Вывод',
     'out.folder':        'Папка',
     'out.browse':        'Обзор',
@@ -379,12 +412,14 @@ const TRANSLATIONS = {
     'ops.tracks':        'Треки',
     'ops.start':         'Старт',
     'ops.stop':          'Стоп',
+    'ops.retry':         'Повторить ошибки',
     'term.title':        'Журнал',
     'term.clear':        'Очистить',
     'term.idle':         'Готов',
     'term.running':      'Выполняется',
     'term.ready':        'Готово.',
     'log.token.missing': 'Сначала введите OAuth-токен.',
+    'log.token.forgot':  'Токен забыт.',
     'log.url.missing':   'Введите ссылку или ID Яндекс Музыки.',
     'log.parse.fail':    'Не удалось разобрать ссылку — вставьте полный адрес music.yandex.ru.',
     'log.no.tracks':     'Загружаемые треки не найдены.',
@@ -393,6 +428,8 @@ const TRANSLATIONS = {
     'log.stopped':       'Остановлено пользователем.',
     'log.stopped.track': 'остановлен.',
     'log.failed':        'ошибка:',
+    'log.skipped':       'пропущен (уже есть):',
+    'log.retry':         'Повтор неудачных:',
     'log.saved':         'Сохранено:',
     'log.ready':         'Готово:',
     'log.zip.building':  'Создание ZIP:',
@@ -486,8 +523,36 @@ function togglePw() {
   }
 }
 function getToken()   { return document.getElementById('token').value.trim(); }
-function saveToken(t) { try { localStorage.setItem('ym_token', t); } catch {} }
-function loadToken()  { try { return localStorage.getItem('ym_token') || ''; } catch { return ''; } }
+function wantRemember() { return document.getElementById('opt-remember')?.checked ?? false; }
+// Token lives in sessionStorage by default; localStorage only with explicit opt-in.
+function saveToken(t) {
+  try {
+    sessionStorage.setItem('ym_token', t);
+    if (wantRemember()) localStorage.setItem('ym_token', t);
+    else localStorage.removeItem('ym_token');
+  } catch {}
+}
+function loadToken() {
+  try {
+    const s = sessionStorage.getItem('ym_token');
+    if (s) return s;
+    // One-time migration from legacy always-localStorage versions.
+    const legacy = localStorage.getItem('ym_token') || '';
+    if (legacy) {
+      sessionStorage.setItem('ym_token', legacy);
+      const cb = document.getElementById('opt-remember');
+      if (cb) cb.checked = true;
+    }
+    return legacy;
+  } catch { return ''; }
+}
+function forgetToken() {
+  try { sessionStorage.removeItem('ym_token'); localStorage.removeItem('ym_token'); } catch {}
+  document.getElementById('token').value = '';
+  const cb = document.getElementById('opt-remember');
+  if (cb) cb.checked = false;
+  log(t('log.token.forgot'), 'WARN');
+}
 document.getElementById('token').value = loadToken();
 
 // ── Settings ─────────────────────────────────────────────────────────────────
@@ -508,10 +573,14 @@ function getOpts() {
     embedCover:       document.getElementById('opt-cover')?.checked ?? true,
     fetchLyrics:      lyrFmt !== 'none',
     filenameTemplate: document.getElementById('filename-template')?.value?.trim() || '',
+    stickToArtist:    document.getElementById('opt-stick')?.checked ?? false,
+    onlyMusic:        document.getElementById('opt-music-only')?.checked ?? false,
+    coverResolution:  parseInt(document.getElementById('cover-res')?.value) || 400,
+    concurrency:      Math.min(5, Math.max(1, parseInt(document.getElementById('opt-conc')?.value) || 3)),
+    skipExisting:     document.getElementById('opt-skip')?.checked ?? false,
   };
 }
 function getDelay()    { return parseInt(document.getElementById('opt-delay')?.value) || 0; }
-function getCoverRes() { return parseInt(document.getElementById('cover-res')?.value) || 400; }
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 function log(msg, level = 'INFO') {
@@ -572,35 +641,56 @@ function setRunning(running) {
     'text-[10px] font-bold uppercase ' + (running ? 'text-primary animate-pulse' : 'text-[#555]');
 }
 
-// ── Download one track ────────────────────────────────────────────────────────
-async function downloadOne(i) {
-  const track = tracks[i];
-  const token = getToken();
-  if (!token) { log(t('log.token.missing'), 'ERR'); return; }
+// ── Batch runner (parallel workers, skip-existing, retry support) ─────────────
+let failedIdx = [];   // positions into `tracks` that failed in the last run
+let lastRun = null;   // { token, quality, opts, mode: 'folder'|'zip', items }
 
-  setTrackProgress(0);
-  try {
-    const { bytes, filename } = await downloadTrack(
-      track, token, getQuality(), getOpts(),
-      msg => {
-        log(msg);
-        const m = msg.match(/(\d+)%/);
-        if (m) setTrackProgress(parseInt(m[1]) / 100);
-      },
-      _downloadAbort?.signal
-    );
-    await saveFile(bytes, filename);
-    setTrackProgress(1);
-    log(t('log.saved') + ' ' + filename, 'OK');
-  } catch (e) {
-    if (e.name === 'AbortError') {
-      log(`Track ${i+1} ${t('log.stopped.track')}`, 'WARN');
-    } else {
-      const msg = e instanceof Error ? e.message : JSON.stringify(e);
-      log(`Track ${i+1} ${t('log.failed')} ${msg}`, 'ERR');
-      console.error(e);
+function showRetry(n) {
+  document.getElementById('retry-btn').style.display = n > 0 ? '' : 'none';
+}
+
+// Run downloadTrack over indices[] with opts.concurrency workers.
+// collect(i, result) handles each file (save now / stash for ZIP).
+async function runItems(indices, token, quality, opts, collect) {
+  const oneBar = (opts.concurrency || 1) === 1;
+  let done = 0;
+  const total = indices.length;
+  await runPool(opts.concurrency || 1, indices, async (i) => {
+    if (opts.skipExisting) {
+      try {
+        if (await outputFileExistsAny(tracks[i], opts.filenameTemplate)) {
+          log(`[${i + 1}] ${t('log.skipped')}`, 'WARN');
+          done++; setOverallProgress(done, total);
+          return;
+        }
+      } catch {}
     }
-  }
+    try {
+      const result = await downloadTrack(
+        tracks[i], token, quality, opts,
+        msg => {
+          log(`[${i + 1}] ${msg}`);
+          if (oneBar) {
+            const m = msg.match(/(\d+)%/);
+            if (m) setTrackProgress(parseInt(m[1]) / 100);
+          }
+        },
+        _downloadAbort?.signal
+      );
+      await collect(i, result);
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        log(`Track ${i + 1} ${t('log.stopped.track')}`, 'WARN');
+      } else {
+        const msg = e instanceof Error ? e.message : JSON.stringify(e);
+        log(`Track ${i + 1} ${t('log.failed')} ${msg}`, 'ERR');
+        console.error(e);
+        failedIdx.push(i);
+      }
+    }
+    done++; setOverallProgress(done, total);
+    if (getDelay()) await delay(getDelay());
+  }, () => !isRunning);
 }
 
 // ── Main Start flow ────────────────────────────────────────────────────────────
@@ -621,7 +711,7 @@ async function onStart() {
     if (!parsed) { log(t('log.parse.fail'), 'ERR'); return; }
 
     log(`${t('log.resolving')} ${parsed.type}…`);
-    const list = await resolveTracklist(parsed, token, msg => log(msg));
+    const list = await resolveTracklist(parsed, token, msg => log(msg), getOpts());
     log(`resolveTracklist returned ${list?.length ?? 'null'} ${t('log.returned')}`);
 
     if (!list?.length) { log(t('log.no.tracks'), 'WARN'); return; }
@@ -638,44 +728,35 @@ async function onStart() {
     }
 
     _downloadAbort = new AbortController();
+    failedIdx = [];
+    showRetry(0);
 
-    if ('showDirectoryPicker' in window) {
-      // Chrome/Edge: pick folder once, save silently
-      for (let i = 0; i < list.length; i++) {
-        if (!isRunning) { log(t('log.stopped'), 'WARN'); break; }
-        await downloadOne(i);
-        setOverallProgress(i + 1, list.length);
-        if (i < list.length - 1) await delay(getDelay());
-      }
+    const runToken = token, runQuality = getQuality(), runOpts = getOpts();
+    const folderMode = 'showDirectoryPicker' in window;
+    lastRun = { token: runToken, quality: runQuality, opts: runOpts, mode: folderMode ? 'folder' : 'zip', items: [] };
+
+    if (folderMode) {
+      // Chrome/Edge: pick folder once, save silently (parallel workers)
+      await runItems(list.map((_, i) => i), runToken, runQuality, runOpts, async (i, result) => {
+        await saveFile(result.bytes, result.relpath || result.filename);
+        log(t('log.saved') + ' ' + result.filename, 'OK');
+      });
     } else {
       // Firefox: collect all, download as single ZIP
-      const items = [];
-      for (let i = 0; i < list.length; i++) {
-        if (!isRunning) { log(t('log.stopped'), 'WARN'); break; }
-        try {
-          const result = await downloadTrack(
-            tracks[i], token, getQuality(), getOpts(),
-            msg => log(msg),
-            _downloadAbort?.signal
-          );
-          items.push(result);
-          log(t('log.ready') + ' ' + result.filename, 'OK');
-        } catch (e) {
-          if (e.name === 'AbortError') { log(`Track ${i+1} ${t('log.stopped.track')}`, 'WARN'); break; }
-          log(`Track ${i+1} ${t('log.failed')} ${e.message}`, 'ERR');
-        }
-        setOverallProgress(i + 1, list.length);
-        if (i < list.length - 1) await delay(getDelay());
-      }
-      if (items.length) {
+      await runItems(list.map((_, i) => i), runToken, runQuality, runOpts, async (i, result) => {
+        lastRun.items.push(result);
+        log(t('log.ready') + ' ' + result.filename, 'OK');
+      });
+      if (lastRun.items.length) {
         const zipName = (extractMeta(list[0]).album || 'yandex-music') + '.zip';
         log(`${t('log.zip.building')} ${zipName}…`);
-        await saveAsZip(items, zipName);
+        await saveAsZip(lastRun.items, zipName);
         log(t('log.zip.done'), 'OK');
       }
     }
 
     if (isRunning) log(t('log.all.done'), 'OK');
+    showRetry(failedIdx.length);
 
   } catch (e) {
     log(e instanceof Error ? e.message : JSON.stringify(e), 'ERR');
@@ -689,6 +770,47 @@ function onStop() {
   isRunning = false;
   _downloadAbort?.abort();
   _downloadAbort = null;
+}
+
+// Re-run only the tracks that failed (frozen token/opts from the last run).
+async function onRetry() {
+  if (isRunning || !lastRun || !failedIdx.length) return;
+  const { token, quality, opts, mode } = lastRun;
+  const indices = failedIdx;
+  failedIdx = [];
+  showRetry(0);
+  setRunning(true);
+  setOverallProgress(0, indices.length);
+  _downloadAbort = new AbortController();
+  log(`${t('log.retry')} ${indices.length}`);
+  try {
+    if (mode === 'folder') {
+      await runItems(indices, token, quality, opts, async (i, result) => {
+        await saveFile(result.bytes, result.relpath || result.filename);
+        log(t('log.saved') + ' ' + result.filename, 'OK');
+      });
+    } else {
+      const fresh = [];
+      await runItems(indices, token, quality, opts, async (i, result) => {
+        fresh.push(result);
+        log(t('log.ready') + ' ' + result.filename, 'OK');
+      });
+      if (fresh.length) {
+        lastRun.items.push(...fresh);
+        const zipName = (extractMeta(tracks[0]).album || 'yandex-music') + '.zip';
+        log(`${t('log.zip.building')} ${zipName}…`);
+        await saveAsZip(lastRun.items, zipName);
+        log(t('log.zip.done'), 'OK');
+      }
+    }
+    if (isRunning) log(t('log.all.done'), 'OK');
+  } catch (e) {
+    log(e instanceof Error ? e.message : JSON.stringify(e), 'ERR');
+    console.error(e);
+  } finally {
+    setRunning(false);
+    showRetry(failedIdx.length);
+  }
 }
 
 function delay(ms) { return new Promise(r => setTimeout(r, ms)); }

@@ -27,7 +27,10 @@ app.get(['/proxy', '/api/proxy'], async (req, res) => {
     const url = new URL(`${YANDEX_API}/${apiPath}`);
     for (const [k, v] of Object.entries(queryParams)) url.searchParams.set(k, v);
 
-    const upstream = await fetchWithTimeout(url.toString(), {
+    // fetchWithRetry absorbs transient 429/5xx; persistent 429 re-surfaced
+    // with its status so the browser can back off too (see apiGet).
+    const { fetchWithRetry } = require('./_lib');
+    const upstream = await fetchWithRetry(url.toString(), {
       headers: { ...YANDEX_HEADERS, ...(auth ? { Authorization: auth } : {}) },
     });
     const text = await upstream.text();
@@ -35,7 +38,8 @@ app.get(['/proxy', '/api/proxy'], async (req, res) => {
     try { data = JSON.parse(text); } catch { data = { raw: text }; }
     res.status(upstream.status).json(data);
   } catch (e) {
-    res.status(500).json({ error: e.message });
+    const m = String((e && e.message) || '').match(/^HTTP (\d{3})$/);
+    res.status(m ? Number(m[1]) : 500).json({ error: e.message });
   }
 });
 
@@ -45,8 +49,9 @@ app.get(['/stream', '/api/stream'], async (req, res) => {
   if (!url) return res.status(400).json({ error: 'url required' });
 
   try {
-    const upstream = await fetchWithTimeout(decodeURIComponent(url), {}, 60000);
-    if (!upstream.ok) return res.status(upstream.status).end();
+    // Retry transient CDN 5xx (seen live on fresh signed URLs)
+    const { fetchWithRetry } = require('./_lib');
+    const upstream = await fetchWithRetry(decodeURIComponent(url));
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/octet-stream');
     const cl = upstream.headers.get('content-length');
     if (cl) res.setHeader('Content-Length', cl);
@@ -106,19 +111,47 @@ app.get(['/playlist', '/api/playlist'], async (req, res) => {
   }
 });
 
-// Fetch lyrics (avoids CORS)
+// Fetch lyrics (avoids CORS) — signed request, see _lib.getSignRequest
 app.get(['/lyrics', '/api/lyrics'], async (req, res) => {
   const { trackId, format = 'TEXT' } = req.query;
   if (!trackId) return res.status(400).json({ error: 'trackId required' });
 
   const auth = req.headers['authorization'];
   try {
-    const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}`;
+    const { getSignRequest, ANDROID_HEADERS } = require('./_lib');
+    const { timeStamp, sign } = getSignRequest(trackId);
+    const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}&timeStamp=${timeStamp}&sign=${encodeURIComponent(sign)}`;
     const upstream = await fetchWithTimeout(url, {
-      headers: { ...YANDEX_HEADERS, ...(auth ? { Authorization: auth } : {}) },
+      headers: { ...ANDROID_HEADERS, ...(auth ? { Authorization: auth } : {}) },
     });
     const data = await upstream.json();
     res.status(upstream.status).json(data);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Lyrics text content (two-step: signed meta + pre-signed S3 download, no CORS)
+app.get(['/lyrics-text', '/api/lyrics-text'], async (req, res) => {
+  const { trackId, format = 'TEXT' } = req.query;
+  if (!trackId) return res.status(400).json({ error: 'trackId required' });
+
+  const auth = req.headers['authorization'];
+  try {
+    const { getSignRequest, ANDROID_HEADERS } = require('./_lib');
+    const { timeStamp, sign } = getSignRequest(trackId);
+    const metaUrl =
+      `${YANDEX_API}/tracks/${trackId}/lyrics` +
+      `?format=${format}&timeStamp=${timeStamp}&sign=${encodeURIComponent(sign)}`;
+    const meta = await fetchWithTimeout(metaUrl, {
+      headers: { ...ANDROID_HEADERS, ...(auth ? { Authorization: auth } : {}) },
+    });
+    if (!meta.ok) return res.status(meta.status).json({ error: `lyrics meta HTTP ${meta.status}` });
+    const downloadUrl = (await meta.json())?.result?.downloadUrl;
+    if (!downloadUrl) return res.status(404).json({ error: 'no lyrics for this track' });
+    const textRes = await fetchWithTimeout(downloadUrl, {}, 30000);
+    if (!textRes.ok) return res.status(502).json({ error: `lyrics download HTTP ${textRes.status}` });
+    res.json({ lyrics: await textRes.text() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
