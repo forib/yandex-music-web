@@ -49,7 +49,7 @@ Returns `null` for invalid URLs.
 
 ---
 
-#### `resolveTracklist(parsed, token, onStatus)`
+#### `resolveTracklist(parsed, token, onStatus, opts)`
 Resolve parsed URL to array of track objects.
 
 ```javascript
@@ -58,6 +58,17 @@ const tracks = await resolveTracklist(parsed, token, status => console.log(statu
 ```
 
 `onStatus` - optional callback for progress messages.
+`opts` - optional `{ stickToArtist, onlyMusic }` filters for artist URLs.
+
+---
+
+#### `runPool(n, items, fn, shouldStop)`
+Run `fn(item, index)` over `items` with at most `n` in flight. `shouldStop()` is checked between items.
+
+---
+
+#### `outputFileExistsAny(track, template)`
+True if any likely output (`.mp3`/`.flac`/`.m4a`) already exists under the picked folder. Always false until a folder is picked (File System Access API).
 
 ---
 
@@ -316,7 +327,7 @@ const parsed = parseYandexUrl('https://music.yandex.ru/album/123/track/456');
 
 ---
 
-#### `resolveTracklist(parsed, token, onStatus)`
+#### `resolveTracklist(parsed, token, onStatus, opts)`
 Разрешение URL в массив объектов треко��.
 
 ```javascript
@@ -325,6 +336,17 @@ const tracks = await resolveTracklist(parsed, token, status => console.log(statu
 ```
 
 `onStatus` - опциональный коллбэк для сообщений о прогрессе.
+`opts` - опциональные фильтры `{ stickToArtist, onlyMusic }` для URL исполнителей.
+
+---
+
+#### `runPool(n, items, fn, shouldStop)`
+Выполнение `fn(item, index)` для `items` с лимитом `n` параллельных задач. `shouldStop()` проверяется между задачами.
+
+---
+
+#### `outputFileExistsAny(track, template)`
+True, если какой-то из вероятных выходов (`.mp3`/`.flac`/`.m4a`) уже есть в выбранной папке. Всегда false, пока папка не выбрана (File System Access API).
 
 ---
 

@@ -452,15 +452,39 @@ async function downloadTrack(track, token, quality, opts = {}, onStatus, signal)
   return { bytes: tagged, filename: basename(relpath), relpath };
 }
 
-let _dirHandle = null;
+// Generic worker pool: at most n fn() in flight. shouldStop() is checked
+// between items (used by the UI Stop button). Resolves when all done.
+async function runPool(n, items, fn, shouldStop) {
+  let ptr = 0;
+  const workers = [];
+  const total = items.length;
+  for (let w = 0; w < Math.min(Math.max(1, n || 1), total); w++) {
+    workers.push((async () => {
+      while (!(shouldStop && shouldStop()) && ptr < total) {
+        const k = ptr++;
+        await fn(items[k], k);
+      }
+    })());
+  }
+  await Promise.all(workers);
+}
 
-function _blobDownload(bytes, filename) {
-  const url = URL.createObjectURL(new Blob([bytes]));
-  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+// True if any likely output (mp3/flac/m4a) already exists under the picked
+// folder. Container is unknown before download-info, so all 3 are probed.
+// Returns false when no folder was picked yet (nothing to skip).
+async function outputFileExistsAny(track, template) {
+  if (typeof _dirHandle === 'undefined' || !_dirHandle) return false;
+  for (const c of ['mp3', 'flac', 'm4a']) {
+    const segs = buildFilename(track, c, template).split('/').filter(Boolean);
+    const name = segs.pop();
+    try {
+      let dir = _dirHandle;
+      for (const s of segs) dir = await dir.getDirectoryHandle(s);
+      await dir.getFileHandle(name);
+      return true;
+    } catch {}
+  }
+  return false;
 }
 
 // Pick a non-colliding filename inside a directory handle: `x.m4a`, `x (2).m4a`, …
@@ -474,6 +498,17 @@ async function uniqueName(dir, filename) {
     try { await dir.getFileHandle(name); name = `${base} (${n})${ext}`; }
     catch { return name; }
   }
+}
+
+let _dirHandle = null;
+
+function _blobDownload(bytes, filename) {
+  const url = URL.createObjectURL(new Blob([bytes]));
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
 // Save bytes — target may contain '/' subfolders (created on the fly).

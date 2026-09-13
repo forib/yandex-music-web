@@ -18,7 +18,7 @@ export function loadFrontend({ withID3 = false } = {}) {
   const dlSrc = fs.readFileSync(path.join(root, 'public/downloader.js'), 'utf8').split('let _dirHandle')[0];
   const mod = { exports: {} };
   new Function('module', 'exports', 'ID3Writer', apiSrc + '\n' + dlSrc +
-    ';module.exports={tagM4a,tagFlac,tagMp3,extractMeta,buildFilename,filterAlbum,parseYandexUrl,mp4children,mp4u32};'
+    ';module.exports={tagM4a,tagFlac,tagMp3,extractMeta,buildFilename,filterAlbum,parseYandexUrl,mp4children,mp4u32,runPool,outputFileExistsAny,uniqueName};'
   )(mod, mod.exports, id3);
   return mod.exports;
 }
