@@ -4,18 +4,7 @@
 const express = require('express');
 
 const app = express();
-const YANDEX_API = 'https://api.music.yandex.net';
-
-function fetchWithTimeout(url, opts = {}, ms = 30000) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
-
-const YANDEX_HEADERS = {
-  'X-Yandex-Music-Client': 'WindowsPhone/3.20',
-  'Accept': 'application/json',
-};
+const { YANDEX_API, YANDEX_HEADERS, ANDROID_HEADERS, fetchWithTimeout, fetchWithRetry, getSignRequest, getFileInfo } = require('./_lib');
 
 // Forward JSON API calls to api.music.yandex.net
 app.get(['/proxy', '/api/proxy'], async (req, res) => {
@@ -29,7 +18,6 @@ app.get(['/proxy', '/api/proxy'], async (req, res) => {
 
     // fetchWithRetry absorbs transient 429/5xx; persistent 429 re-surfaced
     // with its status so the browser can back off too (see apiGet).
-    const { fetchWithRetry } = require('./_lib');
     const upstream = await fetchWithRetry(url.toString(), {
       headers: { ...YANDEX_HEADERS, ...(auth ? { Authorization: auth } : {}) },
     });
@@ -50,7 +38,6 @@ app.get(['/stream', '/api/stream'], async (req, res) => {
 
   try {
     // Retry transient CDN 5xx (seen live on fresh signed URLs)
-    const { fetchWithRetry } = require('./_lib');
     const upstream = await fetchWithRetry(decodeURIComponent(url));
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/octet-stream');
     const cl = upstream.headers.get('content-length');
@@ -118,7 +105,6 @@ app.get(['/lyrics', '/api/lyrics'], async (req, res) => {
 
   const auth = req.headers['authorization'];
   try {
-    const { getSignRequest, ANDROID_HEADERS } = require('./_lib');
     const { timeStamp, sign } = getSignRequest(trackId);
     const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}&timeStamp=${timeStamp}&sign=${encodeURIComponent(sign)}`;
     const upstream = await fetchWithTimeout(url, {
@@ -138,7 +124,6 @@ app.get(['/lyrics-text', '/api/lyrics-text'], async (req, res) => {
 
   const auth = req.headers['authorization'];
   try {
-    const { getSignRequest, ANDROID_HEADERS } = require('./_lib');
     const { timeStamp, sign } = getSignRequest(trackId);
     const metaUrl =
       `${YANDEX_API}/tracks/${trackId}/lyrics` +
@@ -164,7 +149,6 @@ app.get(['/file-info', '/api/file-info'], async (req, res) => {
 
   const auth = req.headers['authorization'];
   try {
-    const { getFileInfo } = require('./_lib');
     res.json(await getFileInfo(trackId, parseInt(quality, 10), auth));
   } catch (e) {
     res.status(502).json({ error: e.message });

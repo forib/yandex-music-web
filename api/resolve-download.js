@@ -1,8 +1,4 @@
-function fetchWithTimeout(url, opts = {}, ms = 30000) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
+const { fetchWithTimeout } = require('./_lib');
 
 module.exports = async (req, res) => {
   const { url, codec } = req.query;

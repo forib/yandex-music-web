@@ -3,20 +3,9 @@ const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-const YANDEX_API = 'https://api.music.yandex.net';
-
-function fetchWithTimeout(url, opts = {}, ms = 30000) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
+const { YANDEX_API, YANDEX_HEADERS, ANDROID_HEADERS, fetchWithTimeout, fetchWithRetry, getSignRequest, getFileInfo } = require('./api/_lib');
 
 app.use(express.static(path.join(__dirname, 'public')));
-
-const YANDEX_HEADERS = {
-  'X-Yandex-Music-Client': 'WindowsPhone/3.20',
-  'Accept': 'application/json',
-};
 
 // Forward JSON API calls to api.music.yandex.net
 app.get('/api/proxy', async (req, res) => {
@@ -31,7 +20,6 @@ app.get('/api/proxy', async (req, res) => {
     console.log(`→ ${url.toString()}`);
     // fetchWithRetry absorbs transient 429/5xx; persistent 429 re-surfaced
     // with its status so the browser can back off too (see apiGet).
-    const { fetchWithRetry } = require('./api/_lib');
     const upstream = await fetchWithRetry(url.toString(), {
       headers: { ...YANDEX_HEADERS, ...(auth ? { Authorization: auth } : {}) },
     });
@@ -126,7 +114,6 @@ app.get('/api/lyrics', async (req, res) => {
 
   const auth = req.headers['authorization'];
   try {
-    const { getSignRequest, ANDROID_HEADERS } = require('./api/_lib');
     const { timeStamp, sign } = getSignRequest(trackId);
     const url = `${YANDEX_API}/tracks/${trackId}/lyrics?format=${format}&timeStamp=${timeStamp}&sign=${encodeURIComponent(sign)}`;
     const upstream = await fetchWithTimeout(url, {
@@ -146,7 +133,6 @@ app.get('/api/lyrics-text', async (req, res) => {
 
   const auth = req.headers['authorization'];
   try {
-    const { getSignRequest, ANDROID_HEADERS, fetchWithTimeout } = require('./api/_lib');
     const { timeStamp, sign } = getSignRequest(trackId);
     const metaUrl =
       `${YANDEX_API}/tracks/${trackId}/lyrics` +
@@ -173,7 +159,6 @@ app.get('/api/file-info', async (req, res) => {
 
   const auth = req.headers['authorization'];
   try {
-    const { getFileInfo } = require('./api/_lib');
     res.json(await getFileInfo(trackId, parseInt(quality, 10), auth));
   } catch (e) {
     res.status(502).json({ error: e.message });

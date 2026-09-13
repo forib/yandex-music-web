@@ -288,6 +288,14 @@ function filterAlbum(album, artistId, opts = {}) {
   return true;
 }
 
+// Fail fast on a dead token (mirrors login errors better than a mid-run 401).
+async function checkToken(token) {
+  const data = await apiGet('account/status', {}, token);
+  const uid = data?.result?.account?.uid;
+  if (!uid) throw new Error('bad token: no account uid');
+  return uid;
+}
+
 async function getLyrics(trackId, token, format = 'TEXT') {
   // Two-step fetch happens server-side (S3 pre-signed URL has no CORS).
   const res = await fetch(`/api/lyrics-text?trackId=${trackId}&format=${format}`, {
