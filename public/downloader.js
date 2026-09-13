@@ -396,7 +396,7 @@ function basename(p) { return String(p).split('/').pop(); }
 // ── Main download function ────────────────────────────────────────────────────
 
 async function downloadTrack(track, token, quality, opts = {}, onStatus, signal) {
-  const { embedCover = true, fetchLyrics = false, filenameTemplate = '', coverResolution = 400 } = opts;
+  const { embedCover = true, fetchLyrics = false, lyricsFormat = 'text', filenameTemplate = '', coverResolution = 400 } = opts;
 
   onStatus?.('Getting download info...');
   const dlInfo = await getTrackDownloadInfo(track.id, token, quality);
@@ -432,9 +432,17 @@ async function downloadTrack(track, token, quality, opts = {}, onStatus, signal)
     }
   }
 
-  let lyrics = null;
-  if (fetchLyrics && track.lyricsInfo?.hasAvailableTextLyrics) {
-    try { lyrics = await getLyrics(track.id, token, 'TEXT'); } catch {}
+  // Lyrics mirror ymd/core.py: LRC -> sidecar .lrc file, TEXT -> embedded.
+  // LRC without sync lyrics falls back to embedded TEXT.
+  let lyrics = null, lrcText = null;
+  if (fetchLyrics) {
+    const li = track.lyricsInfo || {};
+    if (lyricsFormat === 'lrc' && li.hasAvailableSyncLyrics) {
+      try { lrcText = await getLyrics(track.id, token, 'LRC'); } catch {}
+    }
+    if (!lrcText && li.hasAvailableTextLyrics) {
+      try { lyrics = await getLyrics(track.id, token, 'TEXT'); } catch {}
+    }
   }
 
   onStatus?.('Tagging metadata...');
@@ -449,7 +457,14 @@ async function downloadTrack(track, token, quality, opts = {}, onStatus, signal)
   }
 
   const relpath = buildFilename(track, dlInfo.container, filenameTemplate);
-  return { bytes: tagged, filename: basename(relpath), relpath };
+  const result = { bytes: tagged, filename: basename(relpath), relpath };
+  if (lrcText) {
+    result.lrc = {
+      bytes: new TextEncoder().encode(lrcText),
+      relpath: relpath.replace(/\.[^.]+$/, '.lrc'),
+    };
+  }
+  return result;
 }
 
 // Generic worker pool: at most n fn() in flight. shouldStop() is checked

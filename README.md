@@ -83,11 +83,11 @@ console.log(track.title, track.artists);
 ---
 
 #### `getTrackDownloadInfo(trackId, token, qualityLevel)`
-Get download URL for a track.
+Get download URLs for a track. Prefers the signed `get-file-info` endpoint (returns a decryption `key` for encrypted tracks), falls back to legacy `download-info`.
 
 ```javascript
 const info = await getTrackDownloadInfo('123456789', token, 2);
-// { container: 'flac', codec: 'flac', quality: 'lossless', urls: [...], bitrate: 0 }
+// { container: 'm4a', codec: 'aac', quality: 'lossless', urls: [...], key: 'hex…' | null, bitrate: 256 }
 ```
 
 `qualityLevel`: 0 = low (64kbps), 1 = high (192kbps), 2 = lossless (FLAC)
@@ -133,8 +133,8 @@ const tracks = await getTracksById(['id1', 'id2', 'id3'], token);
 
 ---
 
-#### `getLyrics(trackId, token)`
-Get track lyrics.
+#### `getLyrics(trackId, token, format)`
+Get track lyrics (`format`: `'TEXT'` or `'LRC'`).
 
 ```javascript
 const lyrics = await getLyrics('123456789', token);
@@ -154,7 +154,7 @@ const result = await downloadTrack(track, token, 2, {
   fetchLyrics: true
 }, status => console.log(status));
 
-// result = { bytes: Uint8Array, filename: '01 - Title.flac', relpath: 'Artist/Album/01 - Title.flac' }
+// result = { bytes: Uint8Array, filename: '01 - Title.flac', relpath: 'Artist/Album/01 - Title.flac', lrc: { bytes, relpath } | undefined }
 ```
 
 `opts`:
@@ -162,6 +162,7 @@ const result = await downloadTrack(track, token, 2, {
 - `fetchLyrics` (default: false) - Fetch and embed lyrics
 - `filenameTemplate` (default: `'{album_artist}/{album}/{track} - {title}'`) - Supports `{title} {artist} {album} {album_artist} {track} {disc} {year}`; `/` creates subfolders, name clashes get ` (2)` suffix
 - `coverResolution` (default: 400) - Cover size in px, `0` = original
+- `lyricsFormat` (`'text'` / `'lrc'`, default `'text'`) - `'lrc'` with sync lyrics adds a sidecar `{...}.lrc` to the result instead of embedding
 
 `quality`: 0 = low, 1 = high, 2 = lossless
 
@@ -361,11 +362,11 @@ console.log(track.title, track.artists);
 ---
 
 #### `getTrackDownloadInfo(trackId, token, qualityLevel)`
-Получение URL для скачивания трека.
+Получение URL для скачивания трека. Предпочитает подписанный эндпоинт `get-file-info` (возвращает ключ `key` для расшифровки), при недоступности — legacy `download-info`.
 
 ```javascript
 const info = await getTrackDownloadInfo('123456789', token, 2);
-// { container: 'flac', codec: 'flac', quality: 'lossless', urls: [...], bitrate: 0 }
+// { container: 'm4a', codec: 'aac', quality: 'lossless', urls: [...], key: 'hex…' | null, bitrate: 256 }
 ```
 
 `qualityLevel`: 0 = low (64kbps), 1 = high (192kbps), 2 = lossless (FLAC)
@@ -411,8 +412,8 @@ const tracks = await getTracksById(['id1', 'id2', 'id3'], token);
 
 ---
 
-#### `getLyrics(trackId, token)`
-Получение текста песни.
+#### `getLyrics(trackId, token, format)`
+Получение текста песни (`format`: `'TEXT'` или `'LRC'`).
 
 ```javascript
 const lyrics = await getLyrics('123456789', token);
@@ -432,7 +433,7 @@ const result = await downloadTrack(track, token, 2, {
   fetchLyrics: true
 }, status => console.log(status));
 
-// result = { bytes: Uint8Array, filename: '01 - Title.flac', relpath: 'Artist/Album/01 - Title.flac' }
+// result = { bytes: Uint8Array, filename: '01 - Title.flac', relpath: 'Artist/Album/01 - Title.flac', lrc: { bytes, relpath } | undefined }
 ```
 
 `opts`:
@@ -440,6 +441,7 @@ const result = await downloadTrack(track, token, 2, {
 - `fetchLyrics` (по умолчанию: false) - Получить и вставить текст
 - `filenameTemplate` (по умолчанию: `'{album_artist}/{album}/{track} - {title}'`) - Поддерживает `{title} {artist} {album} {album_artist} {track} {disc} {year}`; `/` создаёт подпапки, конфликты имён получают суффикс ` (2)`
 - `coverResolution` (по умолчанию: 400) - Размер обложки в пкс, `0` = оригинал
+- `lyricsFormat` (`'text'` / `'lrc'`, по умолчанию `'text'`) - `'lrc'` при наличии синхронного текста добавляет сайдкар `{...}.lrc` вместо встраивания
 
 `quality`: 0 = low, 1 = high, 2 = lossless
 

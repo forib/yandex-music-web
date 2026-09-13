@@ -1,8 +1,4 @@
-function fetchWithTimeout(url, opts = {}, ms = 60000) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  return fetch(url, { ...opts, signal: ctrl.signal }).finally(() => clearTimeout(timer));
-}
+const { fetchWithRetry } = require('./_lib');
 
 module.exports = async (req, res) => {
   const { url } = req.query;
@@ -10,7 +6,6 @@ module.exports = async (req, res) => {
 
   try {
     // Retry transient CDN 5xx (seen live on fresh signed URLs)
-    const { fetchWithRetry } = require('./_lib');
     const upstream = await fetchWithRetry(decodeURIComponent(url));
     res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/octet-stream');
     const cl = upstream.headers.get('content-length');

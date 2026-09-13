@@ -347,6 +347,7 @@ const TRANSLATIONS = {
     'term.running':      'Running',
     'term.ready':        'Ready.',
     'log.token.missing': 'Enter your OAuth token first.',
+    'log.token.invalid': 'Token rejected:',
     'log.token.forgot':  'Token forgotten.',
     'log.url.missing':   'Enter a Yandex Music URL or ID.',
     'log.parse.fail':    'Could not parse URL — paste a full music.yandex.ru link.',
@@ -419,6 +420,7 @@ const TRANSLATIONS = {
     'term.running':      'Выполняется',
     'term.ready':        'Готово.',
     'log.token.missing': 'Сначала введите OAuth-токен.',
+    'log.token.invalid': 'Токен отклонён:',
     'log.token.forgot':  'Токен забыт.',
     'log.url.missing':   'Введите ссылку или ID Яндекс Музыки.',
     'log.parse.fail':    'Не удалось разобрать ссылку — вставьте полный адрес music.yandex.ru.',
@@ -572,6 +574,7 @@ function getOpts() {
   return {
     embedCover:       document.getElementById('opt-cover')?.checked ?? true,
     fetchLyrics:      lyrFmt !== 'none',
+    lyricsFormat:     lyrFmt,
     filenameTemplate: document.getElementById('filename-template')?.value?.trim() || '',
     stickToArtist:    document.getElementById('opt-stick')?.checked ?? false,
     onlyMusic:        document.getElementById('opt-music-only')?.checked ?? false,
@@ -641,6 +644,23 @@ function setRunning(running) {
     'text-[10px] font-bold uppercase ' + (running ? 'text-primary animate-pulse' : 'text-[#555]');
 }
 
+// Persist one downloadTrack result: save now (folder mode) or stash for ZIP.
+// Handles the .lrc sidecar the same way as the audio file.
+async function persistResult(result, zipItems) {
+  if (zipItems) {
+    zipItems.push(result);
+    if (result.lrc) zipItems.push({ bytes: result.lrc.bytes, filename: basename(result.lrc.relpath), relpath: result.lrc.relpath });
+    log(t('log.ready') + ' ' + result.filename, 'OK');
+  } else {
+    await saveFile(result.bytes, result.relpath || result.filename);
+    log(t('log.saved') + ' ' + result.filename, 'OK');
+    if (result.lrc) {
+      await saveFile(result.lrc.bytes, result.lrc.relpath);
+      log(t('log.saved') + ' ' + basename(result.lrc.relpath), 'OK');
+    }
+  }
+}
+
 // ── Batch runner (parallel workers, skip-existing, retry support) ─────────────
 let failedIdx = [];   // positions into `tracks` that failed in the last run
 let lastRun = null;   // { token, quality, opts, mode: 'folder'|'zip', items }
@@ -702,6 +722,13 @@ async function onStart() {
   if (!url)   { log(t('log.url.missing'), 'ERR'); return; }
 
   saveToken(token);
+  try {
+    await checkToken(token);
+  } catch (e) {
+    log(`${t('log.token.invalid')} ${e.message}`, 'ERR');
+    setRunning(false);
+    return;
+  }
   setRunning(true);
   setOverallProgress(0, 0);
   setTrackProgress(0);
@@ -738,14 +765,12 @@ async function onStart() {
     if (folderMode) {
       // Chrome/Edge: pick folder once, save silently (parallel workers)
       await runItems(list.map((_, i) => i), runToken, runQuality, runOpts, async (i, result) => {
-        await saveFile(result.bytes, result.relpath || result.filename);
-        log(t('log.saved') + ' ' + result.filename, 'OK');
+        await persistResult(result, null);
       });
     } else {
       // Firefox: collect all, download as single ZIP
       await runItems(list.map((_, i) => i), runToken, runQuality, runOpts, async (i, result) => {
-        lastRun.items.push(result);
-        log(t('log.ready') + ' ' + result.filename, 'OK');
+        await persistResult(result, lastRun.items);
       });
       if (lastRun.items.length) {
         const zipName = (extractMeta(list[0]).album || 'yandex-music') + '.zip';
@@ -786,14 +811,12 @@ async function onRetry() {
   try {
     if (mode === 'folder') {
       await runItems(indices, token, quality, opts, async (i, result) => {
-        await saveFile(result.bytes, result.relpath || result.filename);
-        log(t('log.saved') + ' ' + result.filename, 'OK');
+        await persistResult(result, null);
       });
     } else {
       const fresh = [];
       await runItems(indices, token, quality, opts, async (i, result) => {
-        fresh.push(result);
-        log(t('log.ready') + ' ' + result.filename, 'OK');
+        await persistResult(result, fresh);
       });
       if (fresh.length) {
         lastRun.items.push(...fresh);
