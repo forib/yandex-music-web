@@ -143,22 +143,24 @@ const result = await downloadTrack(track, token, 2, {
   fetchLyrics: true
 }, status => console.log(status));
 
-// result = { bytes: Uint8Array, filename: '01 - Title.flac' }
+// result = { bytes: Uint8Array, filename: '01 - Title.flac', relpath: 'Artist/Album/01 - Title.flac' }
 ```
 
 `opts`:
 - `embedCover` (default: true) - Embed album cover
 - `fetchLyrics` (default: false) - Fetch and embed lyrics
+- `filenameTemplate` (default: `'{album_artist}/{album}/{track} - {title}'`) - Supports `{title} {artist} {album} {album_artist} {track} {disc} {year}`; `/` creates subfolders, name clashes get ` (2)` suffix
+- `coverResolution` (default: 400) - Cover size in px, `0` = original
 
 `quality`: 0 = low, 1 = high, 2 = lossless
 
 ---
 
-#### `saveFile(bytes, filename)`
-Save file to disk.
+#### `saveFile(bytes, target)`
+Save file to disk. `target` may contain `/` subfolders (created on the fly).
 
 ```javascript
-await saveFile(result.bytes, result.filename);
+await saveFile(result.bytes, result.relpath);
 ```
 
 - **Chrome/Edge**: Shows folder picker, then saves directly
@@ -186,12 +188,12 @@ const meta = extractMeta(track);
 
 ---
 
-#### `buildFilename(track, container)`
-Generate filename from track.
+#### `buildFilename(track, container, template)`
+Generate relative path from track (`/` = subfolders, segments sanitized).
 
 ```javascript
-const filename = buildFilename(track, 'flac');
-// '01 - Song Title.flac'
+const filename = buildFilename(track, 'flac', '{album_artist}/{album}/{track} - {title}');
+// 'Artist/Album/01 - Song Title.flac'
 ```
 
 ---
@@ -408,22 +410,24 @@ const result = await downloadTrack(track, token, 2, {
   fetchLyrics: true
 }, status => console.log(status));
 
-// result = { bytes: Uint8Array, filename: '01 - Title.flac' }
+// result = { bytes: Uint8Array, filename: '01 - Title.flac', relpath: 'Artist/Album/01 - Title.flac' }
 ```
 
 `opts`:
 - `embedCover` (по умолчанию: true) - Вставить обложку
 - `fetchLyrics` (по умолчанию: false) - Получить и вставить текст
+- `filenameTemplate` (по умолчанию: `'{album_artist}/{album}/{track} - {title}'`) - Поддерживает `{title} {artist} {album} {album_artist} {track} {disc} {year}`; `/` создаёт подпапки, конфликты имён получают суффикс ` (2)`
+- `coverResolution` (по умолчанию: 400) - Размер обложки в пкс, `0` = оригинал
 
 `quality`: 0 = low, 1 = high, 2 = lossless
 
 ---
 
-#### `saveFile(bytes, filename)`
-Сохранение файла на диск.
+#### `saveFile(bytes, target)`
+Сохранение файла на диск. `target` может содержать `/` подпапки (создаются автоматически).
 
 ```javascript
-await saveFile(result.bytes, result.filename);
+await saveFile(result.bytes, result.relpath);
 ```
 
 - **Chrome/Edge**: Показывает выбор папки, затем сохраняет напрямую
@@ -451,12 +455,12 @@ const meta = extractMeta(track);
 
 ---
 
-#### `buildFilename(track, container)`
-Генерация имени файла из трека.
+#### `buildFilename(track, container, template)`
+Генерация относительного пути из трека (`/` = подпапки, сегменты очищаются).
 
 ```javascript
-const filename = buildFilename(track, 'flac');
-// '01 - Song Title.flac'
+const filename = buildFilename(track, 'flac', '{album_artist}/{album}/{track} - {title}');
+// 'Artist/Album/01 - Song Title.flac'
 ```
 
 ---

@@ -280,6 +280,14 @@ async function getPublicPlaylist(playlistId, token) {
   );
 }
 
+// Mirror of ymd/cli.py::filter_album (raw JSON uses camelCase metaType).
+function filterAlbum(album, artistId, opts = {}) {
+  if (album.id == null || album.available === false) return false;
+  if (opts.onlyMusic && album.metaType && album.metaType !== 'music') return false;
+  if (opts.stickToArtist && album.artists?.[0]?.id !== Number(artistId)) return false;
+  return true;
+}
+
 async function getLyrics(trackId, token, format = 'TEXT') {
   // Two-step fetch happens server-side (S3 pre-signed URL has no CORS).
   const res = await fetch(`/api/lyrics-text?trackId=${trackId}&format=${format}`, {
@@ -318,7 +326,8 @@ function parseYandexUrl(url) {
 }
 
 // ── Tracklist resolver ────────────────────────────────────────────────────────
-async function resolveTracklist(parsed, token, onStatus) {
+// opts: { stickToArtist, onlyMusic } — mirrors ymd filter_album for artists.
+async function resolveTracklist(parsed, token, onStatus, opts = {}) {
   if (parsed.type === 'track') {
     onStatus?.('Fetching track...');
     const track = await getTrack(parsed.trackId, token);
@@ -377,7 +386,7 @@ async function resolveTracklist(parsed, token, onStatus) {
       const albums = info?.albums || [];
       if (!albums.length) break;
       for (const album of albums) {
-        if (!album.available || album.id == null) continue;
+        if (!filterAlbum(album, parsed.artistId, opts)) continue;
         const full = await getAlbumWithTracks(album.id, token);
         tracks.push(...(full.volumes || []).flat().filter(t => t.available !== false));
       }

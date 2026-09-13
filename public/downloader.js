@@ -20,6 +20,13 @@ function sanitizeFilename(s) {
   return s.replace(/[/\\:*?"<>|]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 200);
 }
 
+// Per-segment variant: keeps '/' as a folder separator (handled by caller)
+// and neutralizes '.' / '..' so a template cannot escape the target folder.
+function sanitizeSegment(s) {
+  const out = sanitizeFilename(s);
+  return (!out || out === '.' || out === '..') ? '_' : out;
+}
+
 // ── Decryption ────────────────────────────────────────────────────────────────
 
 async function decryptAesCtr(encBytes, keyHex) {
@@ -147,6 +154,166 @@ function tagFlac(audioBytes, meta, coverBytes, coverMime) {
   return concat(...parts);
 }
 
+// ── M4A tagging (iTunes ilst atoms) ────────────────────────────────────────────
+// Pure-JS port of ymd/core.py::set_tags MP4 branch. Rewrites moov/udta/meta/ilst
+// and shifts stco/co64 chunk offsets when moov grows in front of mdat.
+
+const _T = new TextEncoder();
+const _D = new TextDecoder('latin1');
+
+function mp4u32(b, o) { return (b[o] * 0x1000000) + (b[o + 1] << 16) + (b[o + 2] << 8) + b[o + 3]; }
+function mp4set32(b, o, v) { b[o] = (v >>> 24) & 0xFF; b[o + 1] = (v >>> 16) & 0xFF; b[o + 2] = (v >>> 8) & 0xFF; b[o + 3] = v & 0xFF; }
+function mp4type(b, o) { return _D.decode(b.slice(o, o + 4)); }
+// 4CC box names are single-byte (latin1): UTF-8 would encode © as 2 bytes.
+function mp4cc(s) { return Uint8Array.from([...s], c => c.charCodeAt(0) & 0xFF); }
+function mp4box(type, ...payloads) {
+  const size = 8 + payloads.reduce((s, p) => s + p.length, 0);
+  const out = new Uint8Array(size);
+  mp4set32(out, 0, size);
+  out.set(mp4cc(type), 4);
+  let p = 8;
+  for (const pl of payloads) { out.set(pl, p); p += pl.length; }
+  return out;
+}
+// Parse direct children of a box payload. Returns [{type, start, size, header}].
+// `full` skips the 4 version/flags bytes (meta). Handles 64-bit largesize.
+function mp4children(buf, start, end, full = false) {
+  const out = [];
+  let p = start + (full ? 4 : 0);
+  while (p + 8 <= end) {
+    let size = mp4u32(buf, p);
+    let header = 8;
+    if (size === 1) {
+      const hi = mp4u32(buf, p + 8), lo = mp4u32(buf, p + 12);
+      if (hi !== 0 || lo > 0xFFFFFFFF) throw new Error('MP4 box too large');
+      size = lo; header = 16;
+    } else if (size === 0) {
+      size = end - p;
+    }
+    if (size < header || p + size > end) throw new Error('Broken MP4 box');
+    out.push({ type: mp4type(buf, p + header - (header === 16 ? 12 : 4)), start: p, size, header });
+    p += size;
+  }
+  return out;
+}
+function mp4find(buf, start, end, type, full = false) {
+  return mp4children(buf, start, end, full).find(c => c.type === type) || null;
+}
+function mp4data(payload, dtype) {
+  const head = new Uint8Array(8);
+  mp4set32(head, 0, dtype); mp4set32(head, 4, 0);
+  return mp4box('data', head, payload);
+}
+function mp4textItem(name, str) {
+  return mp4box(name, mp4data(_T.encode(str), 1));
+}
+function mp4numItem(name, n) {
+  // trkn/disk: reserved(2), number(2), total(2)=0, reserved(2) — iTunes layout
+  const v = new Uint8Array(8);
+  v[2] = (n >>> 8) & 0xFF; v[3] = n & 0xFF;
+  return mp4box(name, mp4data(v, 0));
+}
+// Replace (or append) a direct child box; fixes the parent size. kidsOffset is
+// 8 for plain boxes, 12 for full boxes like meta (size+type+version/flags).
+function mp4swap(buf, boxStart, kidsOffset, type, newBox) {
+  const boxSize = mp4u32(buf, boxStart);
+  const kids = mp4children(buf, boxStart + kidsOffset, boxStart + boxSize);
+  const parts = [buf.slice(boxStart, boxStart + kidsOffset)];
+  let done = false;
+  for (const k of kids) {
+    if (!done && k.type === type) { parts.push(newBox); done = true; }
+    else parts.push(buf.slice(k.start, k.start + k.size));
+  }
+  if (!done) parts.push(newBox);
+  const out = concat(...parts);
+  mp4set32(out, 0, out.length);
+  return out;
+}
+// Only true containers are descended into — leaf boxes (mvhd, stsd, data, …)
+// would misparse as boxes and never contain chunk offsets anyway.
+const MP4_CONTAINERS = new Set(['moov', 'trak', 'mdia', 'minf', 'stbl', 'edts', 'mvex', 'moof', 'traf']);
+// Shift every stco/co64 entry under moov by delta (mdat moved).
+function mp4shiftOffsets(moov, delta) {
+  const walk = (s, e) => {
+    for (const c of mp4children(moov, s, e)) {
+      if (c.type === 'stco') {
+        const n = mp4u32(moov, c.start + 12);
+        for (let i = 0; i < n; i++) {
+          const o = c.start + 16 + i * 4;
+          mp4set32(moov, o, mp4u32(moov, o) + delta);
+        }
+      } else if (c.type === 'co64') {
+        const n = mp4u32(moov, c.start + 12);
+        for (let i = 0; i < n; i++) {
+          const o = c.start + 16 + i * 8;
+          const v = mp4u32(moov, o) * 0x100000000 + mp4u32(moov, o + 4) + delta;
+          mp4set32(moov, o, Math.floor(v / 0x100000000)); mp4set32(moov, o + 4, v >>> 0);
+        }
+      } else if (MP4_CONTAINERS.has(c.type)) {
+        walk(c.start + c.header, c.start + c.size);
+      }
+    }
+  };
+  walk(8, moov.length);
+}
+
+function tagM4a(audioBytes, meta, coverBytes, coverMime) {
+  if (mp4type(audioBytes, 4) !== 'ftyp') throw new Error('Not an MP4 file');
+  const top = mp4children(audioBytes, 0, audioBytes.length);
+
+  let moov = top.find(c => c.type === 'moov');
+  if (!moov) throw new Error('MP4 without moov');
+  let moovBuf = audioBytes.slice(moov.start, moov.start + moov.size);
+
+  // Bottom-up rebuild via mp4swap (appends the child when missing)
+  const hdlrNew = () => mp4box('hdlr', new Uint8Array([0, 0, 0, 0, 0, 0, 0, 0, 109, 100, 105, 114, 97, 112, 112, 108, 0, 0, 0, 0, 0, 0, 0, 0, 0]));
+  let udta = mp4find(moovBuf, 8, moovBuf.length, 'udta');
+
+  // Build new ilst. Artists joined with '; ' (ymd compatibility-level 1).
+  const items = [];
+  if (meta.title)  items.push(mp4textItem('\xa9nam', meta.title));
+  if (meta.album)  items.push(mp4textItem('\xa9alb', meta.album));
+  if (meta.artists?.length)      items.push(mp4textItem('\xa9ART', meta.artists.join('; ')));
+  if (meta.albumArtists?.length) items.push(mp4textItem('aART', meta.albumArtists.join('; ')));
+  if (meta.date)        items.push(mp4textItem('\xa9day', meta.date));
+  if (meta.trackNumber) items.push(mp4numItem('trkn', meta.trackNumber));
+  if (meta.discNumber)  items.push(mp4numItem('disk', meta.discNumber));
+  if (meta.genre)       items.push(mp4textItem('\xa9gen', meta.genre));
+  if (meta.lyrics)      items.push(mp4textItem('\xa9lyr', meta.lyrics));
+  if (meta.url)         items.push(mp4textItem('\xa9cmt', meta.url));
+  if (coverBytes) {
+    const fmt = coverMime === 'image/png' ? 14 : 13;
+    items.push(mp4box('covr', mp4data(coverBytes, fmt)));
+  }
+  const ilstNew = mp4box('ilst', ...items);
+
+  // meta <- ilst, then udta <- meta, then moov <- udta
+  let metaNew;
+  if (!udta) {
+    metaNew = mp4box('meta', new Uint8Array([0, 0, 0, 0]), hdlrNew(), ilstNew);
+  } else {
+    const udtaKids = mp4children(moovBuf, udta.start + udta.header, udta.start + udta.size);
+    const meta = udtaKids.find(c => c.type === 'meta');
+    metaNew = meta
+      ? mp4swap(moovBuf, meta.start, meta.header + 4, 'ilst', ilstNew)
+      : mp4box('meta', new Uint8Array([0, 0, 0, 0]), hdlrNew(), ilstNew);
+  }
+  const udtaNew = udta
+    ? mp4swap(moovBuf, udta.start, udta.header, 'meta', metaNew)
+    : mp4box('udta', metaNew);
+  const moovNew = mp4swap(moovBuf, 0, 8, 'udta', udtaNew);
+
+  const delta = moovNew.length - moov.size;
+  if (delta !== 0) {
+    // If mdat sits after moov, chunk offsets shifted — patch them.
+    const firstMdat = top.find(c => c.type === 'mdat');
+    if (firstMdat && firstMdat.start > moov.start) mp4shiftOffsets(moovNew, delta);
+  }
+
+  const parts = top.map(c => (c.type === 'moov' ? moovNew : audioBytes.slice(c.start, c.start + c.size)));
+  return concat(...parts);
+}
+
 // ── MP3 tagging via browser-id3-writer ───────────────────────────────────────
 
 function tagMp3(audioBytes, meta, coverBytes, coverMime) {
@@ -202,29 +369,34 @@ function extractMeta(track) {
   };
 }
 
+// Returns a RELATIVE path (may contain '/' folders from the template).
+// Default mirrors ymd DEFAULT_PATH_PATTERN: #album-artist/#album/#number - #title.
+// The {disc} token avoids multi-disc collisions (01 - Intro on disc 1 and 2).
 function buildFilename(track, container, template) {
   const meta = extractMeta(track);
   const tokens = {
-    title:        sanitizeFilename(meta.title || 'Unknown'),
-    artist:       sanitizeFilename(meta.artists[0] || meta.albumArtists[0] || 'Unknown'),
-    album_artist: sanitizeFilename(meta.albumArtists[0] || meta.artists[0] || 'Unknown'),
-    album:        sanitizeFilename(meta.album || ''),
+    title:        meta.title || 'Unknown',
+    artist:       meta.artists[0] || meta.albumArtists[0] || 'Unknown',
+    album_artist: meta.albumArtists[0] || meta.artists[0] || 'Unknown',
+    album:        meta.album || '',
     track:        meta.trackNumber ? String(meta.trackNumber).padStart(2, '0') : '',
-    disc:         meta.discNumber  ? String(meta.discNumber) : '',
+    disc:         meta.discNumber ? String(meta.discNumber) : '',
     year:         meta.date ? meta.date.slice(0, 4) : '',
   };
-  if (!template) {
-    return `${tokens.track ? tokens.track + ' - ' : ''}${tokens.title}.${container}`;
-  }
-  let name = template;
+  const tpl = (template && template.trim()) ? template : '{track} - {title}';
+  let name = tpl;
   for (const [k, v] of Object.entries(tokens)) name = name.replaceAll(`{${k}}`, v);
-  return sanitizeFilename(name.trim()) + '.' + container;
+  const parts = name.split('/').map(sanitizeSegment).filter(p => p !== '');
+  if (!parts.length) parts.push('Unknown');
+  return parts.join('/') + '.' + container;
 }
+
+function basename(p) { return String(p).split('/').pop(); }
 
 // ── Main download function ────────────────────────────────────────────────────
 
 async function downloadTrack(track, token, quality, opts = {}, onStatus, signal) {
-  const { embedCover = true, fetchLyrics = false, filenameTemplate = '' } = opts;
+  const { embedCover = true, fetchLyrics = false, filenameTemplate = '', coverResolution = 400 } = opts;
 
   onStatus?.('Getting download info...');
   const dlInfo = await getTrackDownloadInfo(track.id, token, quality);
@@ -249,7 +421,9 @@ async function downloadTrack(track, token, quality, opts = {}, onStatus, signal)
 
   if (meta.coverUri) {
     try {
-      const coverUrl = `https://${meta.coverUri.replace('%%', '400x400')}`;
+      // coverResolution <= 0 means original size (mirrors ymd --cover-resolution).
+      const size = coverResolution > 0 ? `${coverResolution}x${coverResolution}` : 'orig';
+      const coverUrl = `https://${meta.coverUri.replace('%%', size)}`;
       const coverRes = await fetchBinary(`/api/stream?url=${encodeURIComponent(coverUrl)}`);
       coverBytes = coverRes;
       if (coverBytes[0] === 0x89 && coverBytes[1] === 0x50) coverMime = 'image/png';
@@ -271,11 +445,11 @@ async function downloadTrack(track, token, quality, opts = {}, onStatus, signal)
   } else if (dlInfo.container === 'mp3') {
     tagged = tagMp3(audioBytes, fullMeta, embedCover ? coverBytes : null, coverMime);
   } else {
-    // M4A: return untagged for now
-    tagged = audioBytes;
+    tagged = tagM4a(audioBytes, fullMeta, embedCover ? coverBytes : null, coverMime);
   }
 
-  return { bytes: tagged, filename: buildFilename(track, dlInfo.container, filenameTemplate) };
+  const relpath = buildFilename(track, dlInfo.container, filenameTemplate);
+  return { bytes: tagged, filename: basename(relpath), relpath };
 }
 
 let _dirHandle = null;
@@ -289,14 +463,31 @@ function _blobDownload(bytes, filename) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-// Save a file — dialog-free on Chrome/Edge (picks folder once, reuses it).
-// Falls back to a single blob-download dialog on Firefox/Safari.
-async function saveFile(bytes, filename) {
+// Pick a non-colliding filename inside a directory handle: `x.m4a`, `x (2).m4a`, …
+// (Multi-disc albums otherwise overwrite `01 - Intro` from disc 1 with disc 2.)
+async function uniqueName(dir, filename) {
+  const dot = filename.lastIndexOf('.');
+  const base = dot > 0 ? filename.slice(0, dot) : filename;
+  const ext = dot > 0 ? filename.slice(dot) : '';
+  let name = filename;
+  for (let n = 2; ; n++) {
+    try { await dir.getFileHandle(name); name = `${base} (${n})${ext}`; }
+    catch { return name; }
+  }
+}
+
+// Save bytes — target may contain '/' subfolders (created on the fly).
+// Firefox fallback (single save dialog) uses the basename only.
+async function saveFile(bytes, target) {
+  const segs = String(target).split('/').filter(Boolean);
+  const filename = segs.pop() || 'unknown';
   if ('showDirectoryPicker' in window) {
     if (!_dirHandle) {
       _dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
     }
-    const fh = await _dirHandle.getFileHandle(filename, { create: true });
+    let dir = _dirHandle;
+    for (const s of segs) dir = await dir.getDirectoryHandle(s, { create: true });
+    const fh = await dir.getFileHandle(await uniqueName(dir, filename), { create: true });
     const w  = await fh.createWritable();
     await w.write(bytes);
     await w.close();
@@ -306,9 +497,23 @@ async function saveFile(bytes, filename) {
 }
 
 // Batch-save all items as a single ZIP (Firefox fallback for "Download All").
+// Respects relpath folders; de-duplicates like uniqueName.
 async function saveAsZip(items, zipName) {
   const zip = new JSZip();
-  for (const { bytes, filename } of items) zip.file(filename, bytes);
+  const seen = new Set();
+  for (const { bytes, filename, relpath } of items) {
+    let p = String(relpath || filename).replace(/^\/+/, '');
+    if (seen.has(p)) {
+      const dot = p.lastIndexOf('.');
+      const base = dot > 0 ? p.slice(0, dot) : p;
+      const ext = dot > 0 ? p.slice(dot) : '';
+      let n = 2;
+      while (seen.has(`${base} (${n})${ext}`)) n++;
+      p = `${base} (${n})${ext}`;
+    }
+    seen.add(p);
+    zip.file(p, bytes);
+  }
   const blob = await zip.generateAsync({ type: 'blob', compression: 'STORE' });
   _blobDownload(blob, zipName);
 }
